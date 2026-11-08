@@ -57,6 +57,14 @@ def parse_page_selection(s, max_p):
 def custom_format_text(text):
     text = re.sub(r'</?[ub*]+>', '', text)
     
+    # 清除 LaTeX 數學符號 ($...$, \frac, 次方等)
+    text = text.replace('$$', '').replace('$', '')
+    text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1__UNITSLASH__\2', text)
+    sup_map = {'0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹'}
+    text = re.sub(r'\^\{?([0-9])\}?', lambda m: sup_map.get(m.group(1), m.group(0)), text)
+    text = text.replace('\\times', '×').replace('\\div', '÷').replace('\\pm', '±')
+    text = text.replace('\\leq', '≤').replace('\\geq', '≥').replace('\\neq', '≠').replace('\\approx', '≈')
+    
     # 統一轉換選項格式為 (A) (B) (C) (D)
     # 僅針對 ①②③④ 或 (1)(2)(3)(4)，避免誤殺題號 1. 2. 10.
     text = re.sub(r'^\s*(?:①|[（\(]1[）\)])\s*[.．、\s]*', '(A)', text)
@@ -185,8 +193,11 @@ def create_word_document(text, is_english_mode):
             is_fill = "＿＿" in q_content or "{BLANK}" in q_content
             need_bracket = "(   )" in line or (not is_drawing and not is_fill)
 
-            if need_bracket and not q_content.startswith("(   )"):
-                q_content = f"(   ){q_content}"
+            if need_bracket:
+                if re.match(r'^\(\s*\)', q_content):
+                    q_content = re.sub(r'^\(\s*\)\s*', '(   )', q_content)
+                else:
+                    q_content = f"(   ){q_content}"
 
             if q_num <= 9:
                 line = f" {q_num}.{q_content}"
@@ -361,13 +372,14 @@ if uploaded_file is not None:
                        - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
                        - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
                        - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
+                       - **絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$` 或 `$\frac{1}{2}$`），請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。
                     1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
                        - [考試名稱]後面的空格一定要加上
                        - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
                        - 學校只需要名稱前兩個字，考試只需要標示第一次、第二次、或第三次段考試題並且要在整行標題包含後面空格加上底線，然後要靠左對齊。
                        - 範例：`113(一)中和                  第一次段考試題                            `。
                     2. **選擇題 / 是非題**：
-                       - 必須在題號後加上括號 (   )。
+                       - 必須在題號後加上括號 `(   )`，且括號後面**不要加空格**，直接接題目文字。
                        - 範例：`1.(   )這是題目`。
                     3. **填充題 / 作圖題 / 計算題**：
                        - 題號後 **不要** 加括號，直接空格接題目。
