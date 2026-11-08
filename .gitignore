@@ -1,0 +1,27 @@
+# Python 快取與暫存檔
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虛擬環境（避免把幾百 MB 的環境包上傳上去）
+venv/
+env/
+.venv/
+ENV/
+
+# 打包產生的執行檔與暫存目錄（如 PyInstaller）
+build/
+dist/
+*.spec
+
+# 敏感資訊與金鑰（重要！避免外洩）
+.env
+*.json.key
+client_secret*.json
+credentials.json
+
+# 編輯器與系統暫存
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
