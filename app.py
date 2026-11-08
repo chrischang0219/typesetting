@@ -215,6 +215,32 @@ def create_word_document(text, is_english_mode):
     bio.seek(0)
     return bio.getvalue()
 
+
+def get_global_usage(webhook_url):
+    if not webhook_url:
+        return None
+    try:
+        res = requests.get(webhook_url, timeout=5)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return None
+
+def log_usage_to_gsheet(webhook_url, filename, pages_count, model_id, tokens):
+    if not webhook_url:
+        return
+    try:
+        payload = {
+            "filename": filename,
+            "pages": pages_count,
+            "model": model_id,
+            "tokens": tokens
+        }
+        requests.post(webhook_url, json=payload, timeout=5)
+    except Exception:
+        pass
+
 def call_api_with_retry(parts, model_id, api_key, status_box):
     models_to_try = [model_id] + [m for m in ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"] if m != model_id]
     
@@ -276,11 +302,13 @@ if app_password:
                 st.error("❌ 密碼錯誤，請重新輸入。")
         st.stop()
 
-# 初始化本次連線用量統計
+# 初始化本次連線用量統計（備援用）
 if "total_tokens" not in st.session_state:
     st.session_state["total_tokens"] = 0
 if "request_count" not in st.session_state:
     st.session_state["request_count"] = 0
+
+gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 
 # 側邊欄設定
 with st.sidebar:
@@ -289,16 +317,27 @@ with st.sidebar:
     is_english_mode = st.checkbox("英文考卷模式 (啟用 Times New Roman)", value=False)
     
     st.divider()
-    st.header("📊 額度與用量監控")
+    st.header("📊 全域額度與用量監控")
+    
+    global_stats = get_global_usage(gsheet_url) if gsheet_url else None
+    if global_stats is not None:
+        disp_count = global_stats.get("total_requests", 0)
+        disp_tokens = global_stats.get("total_tokens", 0)
+        stats_note = "資料來源：Google 試算表永久紀錄（所有使用者累計）。"
+    else:
+        disp_count = st.session_state["request_count"]
+        disp_tokens = st.session_state["total_tokens"]
+        stats_note = "註：尚未設定試算表同步，目前僅顯示本次開啟網頁後的消耗。"
+
     col1, col2 = st.columns(2)
-    col1.metric("已轉檔次數", f"{st.session_state['request_count']} 次")
-    col2.metric("累計 Tokens", f"{st.session_state['total_tokens']:,}")
+    col1.metric("累計轉檔次數", f"{disp_count} 次")
+    col2.metric("累計 Tokens", f"{disp_tokens:,}")
     
     # 以每日免費/參考額度 1,000,000 Tokens 作為直觀進度條基準
     ref_limit = 1_000_000
-    usage_ratio = min(st.session_state["total_tokens"] / ref_limit, 1.0)
-    st.progress(usage_ratio, text=f"本次工作階段用量佔比 ({usage_ratio*100:.2f}%)")
-    st.caption("註：此處統計本次開啟網頁後的消耗；實際帳戶剩餘額度請點擊下方查看官方儀表板。")
+    usage_ratio = min(disp_tokens / ref_limit, 1.0)
+    st.progress(usage_ratio, text=f"參考額度佔比 ({usage_ratio*100:.2f}%)")
+    st.caption(stats_note)
     st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
 
 # 主畫面：上傳檔案
@@ -357,8 +396,11 @@ if uploaded_file is not None:
             txt, usage = call_api_with_retry(parts, selected_model, api_key, status)
             
             if txt:
+                used_tokens = usage.get("totalTokenCount", 0)
                 st.session_state["request_count"] += 1
-                st.session_state["total_tokens"] += usage.get("totalTokenCount", 0)
+                st.session_state["total_tokens"] += used_tokens
+                if gsheet_url:
+                    log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
                 status.write("✅ 解析成功！正在套用職人排版格式...")
                 docx_bytes = create_word_document(txt, is_english_mode)
                 
