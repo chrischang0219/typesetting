@@ -7,9 +7,14 @@ import os
 import requests
 import urllib3
 import fitz  # PyMuPDF
+from PIL import Image
+try:
+    import numpy as np
+except ImportError:
+    np = None
 from docx import Document
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import qn, nsdecls
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_UNDERLINE, WD_TAB_ALIGNMENT
 
@@ -117,7 +122,62 @@ def set_run_font(run, size, is_english_mode, bold=False, use_title_font=False):
     f.set(qn('w:hAnsi'), ascii_font)
     f.set(qn('w:cs'), ch_font)
 
-def create_word_document(text, is_english_mode):
+def remove_red_blue_marks(pil_img):
+    """使用色彩過濾去除紅筆與藍筆手寫筆跡，保留黑色印刷線條"""
+    if np is None:
+        return pil_img
+    img_rgb = pil_img.convert("RGB")
+    arr = np.array(img_rgb, dtype=np.int16)
+    r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+    
+    # 偵測偏紅或偏藍的筆跡
+    is_red = (r - np.maximum(g, b)) > 35
+    is_blue = (b - np.maximum(r, g)) > 35
+    mask = is_red | is_blue
+    
+    arr[mask] = [255, 255, 255]
+    return Image.fromarray(arr.astype(np.uint8))
+
+def add_floating_picture(paragraph, img_bytes, width_cm=4.5):
+    """將圖片插入段落並設定為『文字在前』(浮動靠右對齊)"""
+    run = paragraph.add_run()
+    inline_shape = run.add_picture(io.BytesIO(img_bytes), width=Cm(width_cm))
+    inline = inline_shape._inline
+    
+    # 取得尺寸與圖片 XML
+    extent = inline.find(qn('wp:extent'))
+    cx = extent.get('cx')
+    cy = extent.get('cy')
+    docPr = inline.find(qn('wp:docPr'))
+    graphic = inline.find(qn('a:graphic'))
+    
+    anchor_xml = f"""
+    <wp:anchor {nsdecls('wp')} distT="0" distB="0" distL="114300" distR="114300"
+               simplePos="0" relativeHeight="251658240" behindDoc="0"
+               locked="0" layoutInCell="1" allowOverlap="1">
+        <wp:simplePos x="0" y="0"/>
+        <wp:positionH relativeFrom="margin">
+            <wp:align>right</wp:align>
+        </wp:positionH>
+        <wp:positionV relativeFrom="paragraph">
+            <wp:posOffset>0</wp:posOffset>
+        </wp:positionV>
+        <wp:extent cx="{cx}" cy="{cy}"/>
+        <wp:effectExtent l="0" t="0" r="0" b="0"/>
+        <wp:wrapNone/>
+        <wp:docPr id="{docPr.get('id')}" name="{docPr.get('name')}"/>
+        <wp:cNvGraphicFramePr>
+            <a:graphicFrameLocks {nsdecls('a')} noChangeAspect="1"/>
+        </wp:cNvGraphicFramePr>
+    </wp:anchor>
+    """
+    anchor = parse_xml(anchor_xml)
+    anchor.append(graphic)
+    
+    drawing = inline.getparent()
+    drawing.replace(inline, anchor)
+
+def create_word_document(text, is_english_mode, page_images=None):
     doc = Document()
     settings = doc.settings.element
     compat = settings.find(qn('w:compat')) or OxmlElement('w:compat')
@@ -126,6 +186,8 @@ def create_word_document(text, is_english_mode):
     compat.append(ult)
 
     sec = doc.sections[0]
+    sec.page_width = Cm(21.0)
+    sec.page_height = Cm(29.7)
     sec.top_margin = sec.bottom_margin = sec.left_margin = sec.right_margin = Cm(1)
 
     header = "考卷排版結果"
@@ -168,8 +230,15 @@ def create_word_document(text, is_english_mode):
     current_q_indent = 0  # 追蹤目前題目的縮排寬度，讓延續行(如對話)能對齊
 
     for line in main_content.split('\n'):
+        # 擷取實驗性圖片座標標記 [IMG: p, ymin, xmin, ymax, xmax]
+        img_coords = []
+        if page_images:
+            for m_img in re.finditer(r'\[IMG:\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]', line):
+                img_coords.append(tuple(map(int, m_img.groups())))
+        line = re.sub(r'\[IMG:[^\]]*\]', '', line)
+
         line = custom_format_text(line)
-        if not line.strip():
+        if not line.strip() and not img_coords:
             continue
         
         p = doc.add_paragraph()
@@ -217,8 +286,26 @@ def create_word_document(text, is_english_mode):
             if current_q_indent > 0:
                 p.paragraph_format.left_indent = Pt(current_q_indent)
 
-        run = p.add_run(line)
-        set_run_font(run, size=12, is_english_mode=is_english_mode)
+        if line.strip():
+            run = p.add_run(line)
+            set_run_font(run, size=12, is_english_mode=is_english_mode)
+
+        # 若該題有配圖，裁切並以「文字在前」貼於右側
+        if img_coords and page_images:
+            for p_idx, ymin, xmin, ymax, xmax in img_coords:
+                if 1 <= p_idx <= len(page_images):
+                    src_img = page_images[p_idx - 1]
+                    w, h = src_img.size
+                    left = max(0, int(xmin / 1000.0 * w) - 5)
+                    top = max(0, int(ymin / 1000.0 * h) - 5)
+                    right = min(w, int(xmax / 1000.0 * w) + 5)
+                    bottom = min(h, int(ymax / 1000.0 * h) + 5)
+                    if right > left and bottom > top:
+                        cropped = src_img.crop((left, top, right, bottom))
+                        cleaned = remove_red_blue_marks(cropped)
+                        img_bio = io.BytesIO()
+                        cleaned.save(img_bio, format="PNG")
+                        add_floating_picture(p, img_bio.getvalue(), width_cm=4.5)
 
     # 將 Word 檔案存進記憶體中以便網頁下載
     bio = io.BytesIO()
@@ -326,6 +413,7 @@ with st.sidebar:
     st.header("⚙️ 排版設定")
     selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
     is_english_mode = st.checkbox("英文考卷模式 (啟用 Times New Roman)", value=False)
+    enable_image_crop = st.checkbox("🖼️ 實驗性：自動裁切配圖 (文字在前)", value=False)
     
     st.divider()
     st.header("📊 今日額度與用量監控")
@@ -397,11 +485,22 @@ if uploaded_file is not None:
                     CONTENT_END
                     """
             
+            if enable_image_crop:
+                prompt += """
+                    7. **配圖裁切座標（實驗性）**：
+                       - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
+                       - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
+                       - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
+                """
             parts = [{"text": prompt}]
+            page_images = []
             status.write(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
             for idx in indices:
                 pix = doc[idx].get_pixmap(dpi=250)
-                b64 = base64.b64encode(pix.tobytes("jpeg")).decode('utf-8')
+                jpg_bytes = pix.tobytes("jpeg")
+                if enable_image_crop:
+                    page_images.append(Image.open(io.BytesIO(jpg_bytes)).convert("RGB"))
+                b64 = base64.b64encode(jpg_bytes).decode('utf-8')
                 parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
             doc.close()
 
@@ -414,7 +513,7 @@ if uploaded_file is not None:
                 if gsheet_url:
                     log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
                 status.write("✅ 解析成功！正在套用職人排版格式...")
-                docx_bytes = create_word_document(txt, is_english_mode)
+                docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
                 
                 # 將結果存入 session_state，避免下載按鈕消失
                 base_name = os.path.splitext(uploaded_file.name)[0]
