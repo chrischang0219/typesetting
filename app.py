@@ -68,6 +68,9 @@ def custom_format_text(text):
     text = re.sub(r'^\s*[（\(]C[）\)]\s*[.．、\s]*|^\s*C[.．、]\s*', '(C)', text, flags=re.IGNORECASE)
     text = re.sub(r'^\s*[（\(]D[）\)]\s*[.．、\s]*|^\s*D[.．、]\s*', '(D)', text, flags=re.IGNORECASE)
 
+    # 修正英文縮寫撇號後方多餘空白 (如 It’ s -> It's)
+    text = re.sub(r"([a-zA-Z])['’]\s+([a-zA-Z])", r"\1'\2", text)
+
     # 標點符號全形轉換（保護小數點、題號點、單位斜線）
     # 1. 先將受保護的符號暫存
     text = re.sub(r'^(\s*\d+)\.', r'\1__QDOT__', text)          # 題號的點 (如 7.)
@@ -88,7 +91,13 @@ def set_run_font(run, size, is_english_mode, bold=False, use_title_font=False):
     run.bold = bold
     
     ch_font = DOC_TITLE_FONT if use_title_font else DOC_CHINESE_FONT
-    ascii_font = DOC_ENGLISH_FONT if (is_english_mode and not use_title_font) else ch_font
+    if use_title_font:
+        # 標題的英數字使用標楷體，避免王漢宗顏楷體繁缺少英數字元時退回 Times New Roman
+        ascii_font = DOC_CHINESE_FONT
+    elif is_english_mode:
+        ascii_font = DOC_ENGLISH_FONT
+    else:
+        ascii_font = ch_font
     
     run.font.name = ascii_font
     rPr = run._element.get_or_add_rPr()
@@ -116,17 +125,23 @@ def create_word_document(text, is_english_mode):
     
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    # 設定向右延伸至頁尾 (19cm) 的定位點，確保底線能拉滿整行
+    # A4 寬度 21cm，左右邊界各 1cm，內文寬度為 19cm，正中央為 9.5cm
     tab_stops = p.paragraph_format.tab_stops
     if "|" in header:
-        tab_stops.add_tab_stop(Cm(14), WD_TAB_ALIGNMENT.CENTER)
+        tab_stops.add_tab_stop(Cm(9.5), WD_TAB_ALIGNMENT.CENTER)
         tab_stops.add_tab_stop(Cm(19), WD_TAB_ALIGNMENT.RIGHT)
         parts = header.split("|")
         display_header = f"{parts[0].strip()}\t{parts[1].strip()}\t\xa0"
     else:
-        tab_stops.add_tab_stop(Cm(19), WD_TAB_ALIGNMENT.RIGHT)
         clean_header = header.replace(';', '；').replace('~', '～').rstrip()
-        display_header = f"{clean_header}\t\xa0"
+        # 自動偵測「學校」與「第X次段考試題」，將考試名稱置中於 9.5cm
+        m_hdr = re.match(r'^(.*?)\s+((?:第[一二三]次|期中|期末).*)$', clean_header)
+        tab_stops.add_tab_stop(Cm(9.5), WD_TAB_ALIGNMENT.CENTER)
+        tab_stops.add_tab_stop(Cm(19), WD_TAB_ALIGNMENT.RIGHT)
+        if m_hdr:
+            display_header = f"{m_hdr.group(1).strip()}\t{m_hdr.group(2).strip()}\t\xa0"
+        else:
+            display_header = f"{clean_header}\t\xa0"
 
     run_h = p.add_run(display_header)
     run_h.underline = WD_UNDERLINE.SINGLE
@@ -151,10 +166,16 @@ def create_word_document(text, is_english_mode):
         p.paragraph_format.line_spacing = 1.15
         p.paragraph_format.space_after = Pt(2)
 
+        match_sec = re.match(r'^\s*[一二三四五六七八九十]+、', line)
         match_q = re.match(r'^\s*(\d+)\s*[.、．]\s*(.*)', line)
         match_opt = re.match(r'^\s*\([A-Da-d]\)\s*(.*)', line)
 
-        if match_q:
+        if match_sec:
+            # 大題標題（如 五、文法及對話選擇 20%）靠最左對齊，並重置題目縮排
+            current_q_indent = 0
+            line = line.strip()
+
+        elif match_q:
             q_num = int(match_q.group(1))
             q_content = match_q.group(2).strip()
             
@@ -175,9 +196,8 @@ def create_word_document(text, is_english_mode):
             p.paragraph_format.first_line_indent = -Pt(current_q_indent)
 
         elif match_opt:
-            line = " " * 8 + line.strip()
-            if current_q_indent > 0:
-                p.paragraph_format.left_indent = Pt(24)
+            line = line.strip()
+            p.paragraph_format.left_indent = Pt(current_q_indent if current_q_indent > 0 else 48)
 
         else:
             # 延續行 / 對話行（例如英文題目的 Ryan : ...），對齊上一題的題幹起點
