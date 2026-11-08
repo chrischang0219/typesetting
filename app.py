@@ -328,26 +328,26 @@ with st.sidebar:
     is_english_mode = st.checkbox("英文考卷模式 (啟用 Times New Roman)", value=False)
     
     st.divider()
-    st.header("📊 全域額度與用量監控")
+    st.header("📊 今日額度與用量監控")
     
     global_stats = get_global_usage(gsheet_url) if gsheet_url else None
     if global_stats is not None:
-        disp_count = global_stats.get("total_requests", 0)
-        disp_tokens = global_stats.get("total_tokens", 0)
-        stats_note = "資料來源：Google 試算表永久紀錄（所有使用者累計）。"
+        disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
+        disp_tokens = global_stats.get("today_tokens", global_stats.get("total_tokens", 0))
+        stats_note = "資料來源：Google 試算表（每日凌晨 00:00 自動歸零重算）。"
     else:
         disp_count = st.session_state["request_count"]
         disp_tokens = st.session_state["total_tokens"]
         stats_note = "註：尚未設定試算表同步，目前僅顯示本次開啟網頁後的消耗。"
 
     col1, col2 = st.columns(2)
-    col1.metric("累計轉檔次數", f"{disp_count} 次")
-    col2.metric("累計 Tokens", f"{disp_tokens:,}")
+    col1.metric("今日轉檔次數", f"{disp_count} 次")
+    col2.metric("今日 Tokens", f"{disp_tokens:,}")
     
     # 以每日免費/參考額度 1,000,000 Tokens 作為直觀進度條基準
     ref_limit = 1_000_000
     usage_ratio = min(disp_tokens / ref_limit, 1.0)
-    st.progress(usage_ratio, text=f"參考額度佔比 ({usage_ratio*100:.2f}%)")
+    st.progress(usage_ratio, text=f"今日額度佔比 ({usage_ratio*100:.2f}%)")
     st.caption(stats_note)
     st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
 
