@@ -229,7 +229,10 @@ def call_api_with_retry(parts, model_id, api_key, status_box):
                     verify=False
                 )
                 if res.status_code == 200:
-                    return res.json()['candidates'][0]['content']['parts'][0]['text']
+                    data = res.json()
+                    text_out = data['candidates'][0]['content']['parts'][0]['text']
+                    usage = data.get('usageMetadata', {})
+                    return text_out, usage
                 elif res.status_code == 429:
                     status_box.write(f"⚠️ `{mid}` 頻率限制 (429)，等待 20 秒...")
                     time.sleep(20)
@@ -241,7 +244,7 @@ def call_api_with_retry(parts, model_id, api_key, status_box):
             except Exception:
                 break
         status_box.write(f"🔄 `{mid}` 失敗，自動切換下一個可用模型...")
-    return None
+    return None, {}
 
 # ==========================================
 # 🎨 網頁介面 (Streamlit)
@@ -255,11 +258,46 @@ if not api_key:
     st.error("⚠️ 系統尚未設定 API Key，請管理員至 Streamlit Cloud 後台 Secrets 新增 `GEMINI_API_KEY`。")
     st.stop()
 
+# 通行密碼驗證（若 Secrets 有設定 APP_PASSWORD 才啟用）
+app_password = st.secrets.get("APP_PASSWORD", "").strip()
+if app_password:
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+    if not st.session_state["authenticated"]:
+        st.info("🔒 此工具已設定存取密碼，請輸入密碼後繼續使用。")
+        pwd_input = st.text_input("請輸入通行密碼", type="password")
+        if st.button("🔓 登入", type="primary"):
+            if pwd_input == app_password:
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("❌ 密碼錯誤，請重新輸入。")
+        st.stop()
+
+# 初始化本次連線用量統計
+if "total_tokens" not in st.session_state:
+    st.session_state["total_tokens"] = 0
+if "request_count" not in st.session_state:
+    st.session_state["request_count"] = 0
+
 # 側邊欄設定
 with st.sidebar:
     st.header("⚙️ 排版設定")
     selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
     is_english_mode = st.checkbox("英文考卷模式 (啟用 Times New Roman)", value=False)
+    
+    st.divider()
+    st.header("📊 額度與用量監控")
+    col1, col2 = st.columns(2)
+    col1.metric("已轉檔次數", f"{st.session_state['request_count']} 次")
+    col2.metric("累計 Tokens", f"{st.session_state['total_tokens']:,}")
+    
+    # 以每日免費/參考額度 1,000,000 Tokens 作為直觀進度條基準
+    ref_limit = 1_000_000
+    usage_ratio = min(st.session_state["total_tokens"] / ref_limit, 1.0)
+    st.progress(usage_ratio, text=f"本次工作階段用量佔比 ({usage_ratio*100:.2f}%)")
+    st.caption("註：此處統計本次開啟網頁後的消耗；實際帳戶剩餘額度請點擊下方查看官方儀表板。")
+    st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
 
 # 主畫面：上傳檔案
 uploaded_file = st.file_uploader("📁 選擇 PDF 考卷檔案", type=["pdf"])
@@ -314,9 +352,11 @@ if uploaded_file is not None:
                 parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
             doc.close()
 
-            txt = call_api_with_retry(parts, selected_model, api_key, status)
+            txt, usage = call_api_with_retry(parts, selected_model, api_key, status)
             
             if txt:
+                st.session_state["request_count"] += 1
+                st.session_state["total_tokens"] += usage.get("totalTokenCount", 0)
                 status.write("✅ 解析成功！正在套用職人排版格式...")
                 docx_bytes = create_word_document(txt, is_english_mode)
                 
