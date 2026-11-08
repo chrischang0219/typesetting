@@ -23,10 +23,12 @@ DOC_TITLE_FONT = "王漢宗顏楷體繁"
 DOC_CHINESE_FONT = "標楷體"
 DOC_ENGLISH_FONT = "Times New Roman"
 VALID_MODELS = [
-    "gemini-3.8-flash",      # 推薦：速度與精準度最平衡的最新主力
-    "gemini-4-argon",        # 最高階：複雜考卷、字跡模糊時專用
-    "gemini-3.5-flash-lite", # 輕量極速：省額度專用
-    "gemini-2.5-flash"       # 舊版備援（2026/12/1 後官方會自動轉向 3.5-flash-lite）
+    "gemini-3.8-flash",      # 推薦：最新主力，辨識精準度高 (5 RPM / 250K TPM)
+    "gemini-3.6-flash",      # 備用主力：同等級高精準度 (5 RPM / 250K TPM)
+    "gemini-3.5-flash-lite", # 省額度首選：速度極快、每分鐘上限高 (15 RPM / 250K TPM)
+    "gemini-3.1-flash-lite", # 輕量備援：同樣享有高每分鐘次數 (15 RPM / 250K TPM)
+    "gemini-2.5-flash-lite", # 穩定輕量版 (10 RPM / 250K TPM)
+    "gemini-2.5-flash"       # 舊版備援 (5 RPM / 250K TPM)
 ]
 
 st.set_page_config(page_title="考卷排版神器 Pro", page_icon="📄", layout="centered")
@@ -214,7 +216,7 @@ def create_word_document(text, is_english_mode):
     return bio.getvalue()
 
 def call_api_with_retry(parts, model_id, api_key, status_box):
-    models_to_try = [model_id] + [m for m in ["gemini-3.8-flash", "gemini-4-argon", "gemini-3.5-flash-lite"] if m != model_id]
+    models_to_try = [model_id] + [m for m in ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"] if m != model_id]
     
     for mid in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{mid}:generateContent?key={api_key}"
