@@ -1,0 +1,5 @@
+streamlit
+PyMuPDF
+python-docx
+requests
+urllib3
