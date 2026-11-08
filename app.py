@@ -88,7 +88,7 @@ def set_run_font(run, size, is_english_mode, bold=False, use_title_font=False):
     run.bold = bold
     
     ch_font = DOC_TITLE_FONT if use_title_font else DOC_CHINESE_FONT
-    ascii_font = DOC_ENGLISH_FONT if is_english_mode else ch_font
+    ascii_font = DOC_ENGLISH_FONT if (is_english_mode and not use_title_font) else ch_font
     
     run.font.name = ascii_font
     rPr = run._element.get_or_add_rPr()
@@ -96,6 +96,7 @@ def set_run_font(run, size, is_english_mode, bold=False, use_title_font=False):
     f.set(qn('w:eastAsia'), ch_font)
     f.set(qn('w:ascii'), ascii_font)
     f.set(qn('w:hAnsi'), ascii_font)
+    f.set(qn('w:cs'), ch_font)
 
 def create_word_document(text, is_english_mode):
     doc = Document()
@@ -115,18 +116,21 @@ def create_word_document(text, is_english_mode):
     
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    # 設定向右延伸至頁尾 (19cm) 的定位點，確保底線能拉滿整行
+    tab_stops = p.paragraph_format.tab_stops
     if "|" in header:
-        tab_stops = p.paragraph_format.tab_stops
         tab_stops.add_tab_stop(Cm(14), WD_TAB_ALIGNMENT.CENTER)
         tab_stops.add_tab_stop(Cm(19), WD_TAB_ALIGNMENT.RIGHT)
         parts = header.split("|")
         display_header = f"{parts[0].strip()}\t{parts[1].strip()}\t\xa0"
     else:
-        display_header = header.replace(';', '；').replace('~', '～')
+        tab_stops.add_tab_stop(Cm(19), WD_TAB_ALIGNMENT.RIGHT)
+        clean_header = header.replace(';', '；').replace('~', '～').rstrip()
+        display_header = f"{clean_header}\t\xa0"
 
     run_h = p.add_run(display_header)
     run_h.underline = WD_UNDERLINE.SINGLE
-    set_run_font(run_h, size=16, is_english_mode=is_english_mode, bold=True, use_title_font=True)
+    set_run_font(run_h, size=16, is_english_mode=is_english_mode, bold=False, use_title_font=True)
 
     # 萃取內文並防呆清除殘留標籤
     content_match = re.search(r"CONTENT_START(.*?)CONTENT_END", text, re.DOTALL)
@@ -135,6 +139,8 @@ def create_word_document(text, is_english_mode):
     else:
         main_content = re.sub(r"HEADER:.*\n?", "", text)
         main_content = main_content.replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
+
+    current_q_indent = 0  # 追蹤目前題目的縮排寬度，讓延續行(如對話)能對齊
 
     for line in main_content.split('\n'):
         line = custom_format_text(line)
@@ -164,12 +170,19 @@ def create_word_document(text, is_english_mode):
             else:
                 line = f"{q_num}.{q_content}"
             
-            indent_pt = 48 if need_bracket else 24
-            p.paragraph_format.left_indent = Pt(indent_pt)
-            p.paragraph_format.first_line_indent = -Pt(indent_pt)
+            current_q_indent = 48 if need_bracket else 24
+            p.paragraph_format.left_indent = Pt(current_q_indent)
+            p.paragraph_format.first_line_indent = -Pt(current_q_indent)
 
         elif match_opt:
             line = " " * 8 + line.strip()
+            if current_q_indent > 0:
+                p.paragraph_format.left_indent = Pt(24)
+
+        else:
+            # 延續行 / 對話行（例如英文題目的 Ryan : ...），對齊上一題的題幹起點
+            if current_q_indent > 0:
+                p.paragraph_format.left_indent = Pt(current_q_indent)
 
         run = p.add_run(line)
         set_run_font(run, size=12, is_english_mode=is_english_mode)
