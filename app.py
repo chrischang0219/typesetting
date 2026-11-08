@@ -22,7 +22,12 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 DOC_TITLE_FONT = "王漢宗顏楷體繁"
 DOC_CHINESE_FONT = "標楷體"
 DOC_ENGLISH_FONT = "Times New Roman"
-VALID_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+VALID_MODELS = [
+    "gemini-3.8-flash",      # 推薦：速度與精準度最平衡的最新主力
+    "gemini-4-argon",        # 最高階：複雜考卷、字跡模糊時專用
+    "gemini-3.5-flash-lite", # 輕量極速：省額度專用
+    "gemini-2.5-flash"       # 舊版備援（2026/12/1 後官方會自動轉向 3.5-flash-lite）
+]
 
 st.set_page_config(page_title="考卷排版神器 Pro", page_icon="📄", layout="centered")
 
@@ -51,21 +56,31 @@ def custom_format_text(text):
     text = re.sub(r'</?[ub*]+>', '', text)
     
     # 統一轉換選項格式為 (A) (B) (C) (D)
-    text = re.sub(r'^\s*([①1]|[\(\(]1[\)\)])\s*[.．、\s]*', '(A)', text)
-    text = re.sub(r'^\s*([②2]|[\(\(]2[\)\)])\s*[.．、\s]*', '(B)', text)
-    text = re.sub(r'^\s*([③3]|[\(\(]3[\)\)])\s*[.．、\s]*', '(C)', text)
-    text = re.sub(r'^\s*([④4]|[\(\(]4[\)\)])\s*[.．、\s]*', '(D)', text)
+    # 僅針對 ①②③④ 或 (1)(2)(3)(4)，避免誤殺題號 1. 2. 10.
+    text = re.sub(r'^\s*(?:①|[（\(]1[）\)])\s*[.．、\s]*', '(A)', text)
+    text = re.sub(r'^\s*(?:②|[（\(]2[）\)])\s*[.．、\s]*', '(B)', text)
+    text = re.sub(r'^\s*(?:③|[（\(]3[）\)])\s*[.．、\s]*', '(C)', text)
+    text = re.sub(r'^\s*(?:④|[（\(]4[）\)])\s*[.．、\s]*', '(D)', text)
     
-    text = re.sub(r'^\s*[（\(]?A[）\)]?[.．、\s]*', '(A)', text, flags=re.IGNORECASE)
-    text = re.sub(r'^\s*[（\(]?B[）\)]?[.．、\s]*', '(B)', text, flags=re.IGNORECASE)
-    text = re.sub(r'^\s*[（\(]?C[）\)]?[.．、\s]*', '(C)', text, flags=re.IGNORECASE)
-    text = re.sub(r'^\s*[（\(]?D[）\)]?[.．、\s]*', '(D)', text, flags=re.IGNORECASE)
+    # 針對 A~D 選項，必須有括號或後方接標點/空白，避免誤殺英文單字開頭 (如 CONTENT_START)
+    text = re.sub(r'^\s*[（\(]A[）\)]\s*[.．、\s]*|^\s*A[.．、]\s*', '(A)', text, flags=re.IGNORECASE)
+    text = re.sub(r'^\s*[（\(]B[）\)]\s*[.．、\s]*|^\s*B[.．、]\s*', '(B)', text, flags=re.IGNORECASE)
+    text = re.sub(r'^\s*[（\(]C[）\)]\s*[.．、\s]*|^\s*C[.．、]\s*', '(C)', text, flags=re.IGNORECASE)
+    text = re.sub(r'^\s*[（\(]D[）\)]\s*[.．、\s]*|^\s*D[.．、]\s*', '(D)', text, flags=re.IGNORECASE)
 
-    # 標點符號全形轉換
+    # 標點符號全形轉換（保護小數點、題號點、單位斜線）
+    # 1. 先將受保護的符號暫存
+    text = re.sub(r'^(\s*\d+)\.', r'\1__QDOT__', text)          # 題號的點 (如 7.)
+    text = re.sub(r'(?<=\d)\.(?=\d)', '__DECDOT__', text)        # 小數點 (如 100.0)
+    text = re.sub(r'(?<=[a-zA-Z0-9³²])/(?=[a-zA-Z0-9³²])', '__UNITSLASH__', text) # 單位斜線 (如 g/cm³)
+
     fullwidth_map = {';': '；', '~': '～', ',': '，', '?': '？', '!': '！', ':': '：', '.': '．', '*': '×', '/': '÷'}
     for k, v in fullwidth_map.items():
         text = text.replace(k, v)
-    text = text.replace('（', '(').replace('）', ')').replace(' ', ' ')
+
+    # 2. 還原受保護的符號
+    text = text.replace('__QDOT__', '.').replace('__DECDOT__', '.').replace('__UNITSLASH__', '/')
+    text = text.replace('（', '(').replace('）', ')')
     return text
 
 def set_run_font(run, size, is_english_mode, bold=False, use_title_font=False):
@@ -113,8 +128,13 @@ def create_word_document(text, is_english_mode):
     run_h.underline = WD_UNDERLINE.SINGLE
     set_run_font(run_h, size=16, is_english_mode=is_english_mode, bold=True, use_title_font=True)
 
-    content_match = re.search(r"CONTENT_START(.*)CONTENT_END", text, re.DOTALL)
-    main_content = content_match.group(1).strip() if content_match else text
+    # 萃取內文並防呆清除殘留標籤
+    content_match = re.search(r"CONTENT_START(.*?)CONTENT_END", text, re.DOTALL)
+    if content_match:
+        main_content = content_match.group(1).strip()
+    else:
+        main_content = re.sub(r"HEADER:.*\n?", "", text)
+        main_content = main_content.replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
 
     for line in main_content.split('\n'):
         line = custom_format_text(line)
@@ -126,7 +146,7 @@ def create_word_document(text, is_english_mode):
         p.paragraph_format.space_after = Pt(2)
 
         match_q = re.match(r'^\s*(\d+)\s*[.、．]\s*(.*)', line)
-        match_opt = re.match(r'^\s*([A-Da-d①②③④1-4]\s*[.．、\)]|[\(\(][A-Da-d1-4][\)\)])\s*(.*)', line)
+        match_opt = re.match(r'^\s*\([A-Da-d]\)\s*(.*)', line)
 
         if match_q:
             q_num = int(match_q.group(1))
@@ -161,7 +181,7 @@ def create_word_document(text, is_english_mode):
     return bio.getvalue()
 
 def call_api_with_retry(parts, model_id, api_key, status_box):
-    models_to_try = [model_id] + [m for m in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"] if m != model_id]
+    models_to_try = [model_id] + [m for m in ["gemini-3.8-flash", "gemini-4-argon", "gemini-3.5-flash-lite"] if m != model_id]
     
     for mid in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{mid}:generateContent?key={api_key}"
@@ -224,8 +244,11 @@ if uploaded_file is not None:
         
         with st.status("正在處理考卷，請稍候...", expanded=True) as status:
             prompt = """
-                    請分析圖片並遵循規則排版：
-                    請分析考卷圖片，嚴格遵守以下排版規則：
+                    請分析考卷圖片並嚴格遵守以下規則進行逐字轉錄與排版：
+                    0. **最高原則（過濾手寫與精確轉錄）**：
+                       - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
+                       - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
+                       - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
                     1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
                        - [考試名稱]後面的空格一定要加上
                        - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
@@ -239,11 +262,11 @@ if uploaded_file is not None:
                        - 範例：`2. 請畫出三角形` 或 `3. ＿＿＿`。
                     4. **選項處理**：
                        - 若選項是 1,2,3,4 或 (1)(2)(3)(4)，請轉為 ①②③④。
-                       - 若選項是 ABCD，保留原樣。
+                       - 若選項是 (A)(B)(C)(D)，保留原樣。
                        - **務必將每個選項 (A)(B)(C)(D) 或 ①②③④ 放在新的一行**。
                     5. 重要：忽略圖片、圖表，不要輸出圖片描述。
                     6. 如果找不到標題，請把第一行文字當作標題。
-                    格式回傳：
+                    格式回傳（務必完整包含頭尾標記）：
                     HEADER: [標題]
                     CONTENT_START
                     ...
@@ -253,7 +276,7 @@ if uploaded_file is not None:
             parts = [{"text": prompt}]
             status.write(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
             for idx in indices:
-                pix = doc[idx].get_pixmap(dpi=140)
+                pix = doc[idx].get_pixmap(dpi=250)
                 b64 = base64.b64encode(pix.tobytes("jpeg")).decode('utf-8')
                 parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
             doc.close()
