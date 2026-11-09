@@ -282,6 +282,7 @@ def create_word_document(text, is_english_mode, page_images=None):
 
     current_q_indent = 0  # 追蹤目前題目的縮排寬度，讓延續行(如對話)能對齊
     current_sec_is_open = False  # 追蹤目前大題是否為填充題/計算題/應用題
+    current_sec_is_calc = False  # 追蹤目前大題是否為計算/應用/證明題（空 6 行）
     pending_blank_lines = 0  # 延後到小題結束後才插入的空白行數
     lines = main_content.split('\n')
     idx_line = 0
@@ -308,15 +309,9 @@ def create_word_document(text, is_english_mode, page_images=None):
         if not line.strip() and not img_coords:
             continue
         
-        p = doc.add_paragraph()
-        p.paragraph_format.line_spacing = 1.15
-        p.paragraph_format.space_after = Pt(2)
-
         match_sec = re.match(r'^\s*(?:[一二三四五六七八九十]+[、.．]|【題組】|題組)', line)
         match_q = re.match(r'^\s*(\d+)\s*[.、．]\s*(.*)', line)
         match_opt = re.match(r'^\s*\([A-Da-d]\)\s*(.*)', line)
-
-        is_open_question = False
 
         if (match_sec or match_q) and pending_blank_lines > 0:
             for _ in range(pending_blank_lines):
@@ -325,6 +320,12 @@ def create_word_document(text, is_english_mode, page_images=None):
                 blank_p.paragraph_format.space_after = Pt(2)
             pending_blank_lines = 0
 
+        p = doc.add_paragraph()
+        p.paragraph_format.line_spacing = 1.15
+        p.paragraph_format.space_after = Pt(2)
+
+        is_open_question = False
+
         if match_sec:
             # 大題標題（如 二、填充題）靠最左對齊，並重置題目縮排
             current_q_indent = 0
@@ -332,6 +333,7 @@ def create_word_document(text, is_english_mode, page_images=None):
             p.paragraph_format.left_indent = Pt(0)
             p.paragraph_format.first_line_indent = Pt(0)
             current_sec_is_open = any(k in line for k in ["填充", "計算", "應用", "非選", "作圖", "證明"])
+            current_sec_is_calc = any(k in line for k in ["計算", "應用", "證明"])
 
         elif match_q:
             q_num = int(match_q.group(1))
@@ -374,7 +376,7 @@ def create_word_document(text, is_english_mode, page_images=None):
         # 若為填充題、計算題或應用題，記錄空白行數，待該題（含小題）結束後再插入
         target_img_p = p
         if is_open_question:
-            pending_blank_lines = 6 if any(k in line for k in ["計算", "應用", "證明"]) else 4
+            pending_blank_lines = 6 if (current_sec_is_calc or any(k in line for k in ["計算", "應用", "證明"])) else 4
 
         # 若該題有配圖，裁切並以「矩形文繞圖」貼於右側（開放題會貼在空白行右側）
         if img_coords and page_images:
@@ -738,7 +740,13 @@ with col_right:
             with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=True):
                 for i, item in enumerate(st.session_state["history"]):
                     c1, c2 = st.columns([2.2, 1.1], vertical_alignment="center")
-                    c1.markdown(f"<div style='display:flex; align-items:center; min-height:38px; font-weight:600; word-break:break-all;'>{item['name']}</div>", unsafe_allow_html=True)
+                    c1.markdown(
+                        f"<div style='display:flex; flex-direction:column; justify-content:center; min-height:38px;'>"
+                        f"<div style='font-weight:600; word-break:break-all; line-height:1.25;'>{item['name']}</div>"
+                        f"<div style='font-size:0.78rem; opacity:0.7; margin-top:2px;'>🕒 {item['time']}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
                     c2.download_button(
                         label="下載",
                         data=item["data"],
