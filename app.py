@@ -433,33 +433,53 @@ def call_api_with_retry(parts, model_id, api_key, status_box):
 # ==========================================
 # 🎨 網頁介面 (Streamlit)
 # ==========================================
-st.markdown("<h1 style='text-align: center; margin-bottom: 1rem;'>📄 考卷排版神器 Pro</h1>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center; margin-top: -0.5rem; margin-bottom: 0.6rem; font-weight: 700;'>📄 考卷排版神器 Pro</h2>", unsafe_allow_html=True)
 
-# 自訂樣式：卡片邊框、置中標題、雙行核取方塊、寬敞拖曳上傳區
+# 自訂樣式：單一視窗免滾動緊湊排版、沉穩藍灰卡片與置中上傳區
 st.markdown("""
 <style>
-/* 低飽和度沉穩藍灰色系主題微調 */
+/* 縮小頁面上下留白，讓單一畫面即可完整操作 */
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1rem !important;
+    max-width: 1280px !important;
+}
+/* 隱藏預設 header 佔位高度 */
+header[data-testid="stHeader"] {
+    height: 2.2rem !important;
+    background: transparent !important;
+}
+/* 低飽和度沉穩藍灰色系主題 */
 .stApp {
     background-color: #131820;
     color: #e6edf3;
 }
-/* 卡片容器樣式 */
+/* 卡片容器樣式與緊湊內距 */
 [data-testid="stVerticalBlockBorderWrapper"] > div {
     background-color: #1b222c;
     border-color: #2d3748 !important;
     border-radius: 12px !important;
+    padding: 0.85rem 1rem !important;
+}
+/* 縮小卡片標題間距 */
+h3 {
+    margin-top: 0 !important;
+    margin-bottom: 0.4rem !important;
+    font-size: 1.1rem !important;
 }
 /* 核取方塊允許換行不截斷 */
 [data-testid="stCheckbox"] label p {
     white-space: normal !important;
-    line-height: 1.4 !important;
+    line-height: 1.35 !important;
+    font-size: 0.92rem !important;
 }
-/* 自訂檔案上傳區文字與高度 */
+/* 自訂檔案上傳區文字與緊湊高度 */
 [data-testid="stFileUploaderDropzone"] {
     background-color: #161c24;
     border: 1.5px dashed #4a5a70;
     border-radius: 10px;
-    min-height: 180px;
+    min-height: 115px;
+    padding: 0.8rem !important;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -469,7 +489,7 @@ st.markdown("""
 }
 [data-testid="stFileUploaderDropzoneInstructions"] > div::before {
     content: "☁️ 拖曳 PDF 考卷檔案至此或點此上傳檔案";
-    font-size: 1.05rem;
+    font-size: 1rem;
     font-weight: 500;
     color: #cfd8e3;
 }
@@ -484,6 +504,7 @@ button[kind="primary"] {
     background-color: #3b5575 !important;
     border-color: #4a688d !important;
     color: #ffffff !important;
+    font-weight: 600 !important;
 }
 button[kind="primary"]:hover {
     background-color: #4a688d !important;
@@ -540,17 +561,20 @@ with col_left:
             st.write("")
             enable_image_crop = st.checkbox("自動裁切圖片  \n(測試階段)", value=False)
 
-    # 卡片 2：檔案上傳與解析區
+    # 卡片 2：檔案上傳與解析區（所有操作集中於同一張卡片內，免滾動）
     with st.container(border=True):
         uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
 
-    if uploaded_file is not None:
+        if uploaded_file is not None:
             pdf_bytes = uploaded_file.getvalue()
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             total_pages = len(doc)
 
-            st.info(f"已載入：**{uploaded_file.name}**（共 {total_pages} 頁）")
-            page_input = st.text_input("選擇頁數 (輸入頁碼或範圍如 `1-3`、`1,3`，留空則全部轉換)：", value="")
+            info_c1, info_c2 = st.columns([1.1, 1], vertical_alignment="center")
+            with info_c1:
+                st.markdown(f"<div style='background-color:#1e293b; padding:0.45rem 0.75rem; border-radius:6px; font-size:0.9rem; border-left: 3px solid #4a688d;'>📄 已載入：<b>{uploaded_file.name}</b>（共 {total_pages} 頁）</div>", unsafe_allow_html=True)
+            with info_c2:
+                page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder="輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
 
             if st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True):
                 indices = parse_page_selection(page_input, total_pages)
