@@ -93,9 +93,15 @@ def custom_format_text(text):
     text = re.sub(r'(?<=\d)\.(?=\d)', '__DECDOT__', text)        # 小數點 (如 100.0)
     text = re.sub(r'(?<=[a-zA-Z0-9³²])/(?=[a-zA-Z0-9³²])', '__UNITSLASH__', text) # 單位斜線 (如 g/cm³)
 
-    fullwidth_map = {';': '；', '~': '～', ',': '，', '?': '？', '!': '！', ':': '：', '.': '．', '*': '×', '/': '÷'}
+    fullwidth_map = {
+        ';': '；', '~': '～', ',': '，', '?': '？', '!': '！', ':': '：', '.': '．',
+        '*': '×', '/': '÷', '+': '＋', '-': '－', '<': '＜', '>': '＞', '=': '＝'
+    }
     for k, v in fullwidth_map.items():
         text = text.replace(k, v)
+
+    # 移除數學運算符號前後無謂的空白
+    text = re.sub(r'\s*([＋－×÷±＜＞＝])\s*', r'\1', text)
 
     # 2. 還原受保護的符號
     text = text.replace('__QDOT__', '.').replace('__DECDOT__', '.').replace('__UNITSLASH__', '/')
@@ -178,6 +184,45 @@ def add_floating_picture(paragraph, img_bytes, width_cm=4.5):
     drawing = inline.getparent()
     drawing.replace(inline, anchor)
 
+def add_formatted_table(doc, table_lines, indent_pt, is_english_mode):
+    """將 Markdown 表格轉為 Word 表格，並對齊題目選項的縮排"""
+    rows_data = []
+    for tline in table_lines:
+        tline = tline.strip()
+        # 跳過 Markdown 表格分隔線 (如 |---|---|)
+        if re.match(r'^\|[\s\-:|]+\|$', tline):
+            continue
+        cells = [c.strip() for c in tline.strip('|').split('|')]
+        rows_data.append(cells)
+
+    if not rows_data:
+        return
+
+    num_cols = max(len(r) for r in rows_data)
+    table = doc.add_table(rows=len(rows_data), cols=num_cols)
+    table.style = 'Table Grid'
+
+    # 設定表格左縮排，對齊該題選項 (indent_pt 單位為 Pt，1 Pt = 20 dxa)
+    if indent_pt > 0:
+        tblPr = table._tbl.tblPr
+        tblInd = OxmlElement('w:tblInd')
+        tblInd.set(qn('w:w'), str(int(indent_pt * 20)))
+        tblInd.set(qn('w:type'), 'dxa')
+        tblPr.append(tblInd)
+
+    for r_idx, row_vals in enumerate(rows_data):
+        row = table.rows[r_idx]
+        for c_idx in range(num_cols):
+            val = row_vals[c_idx] if c_idx < len(row_vals) else ""
+            val = custom_format_text(val)
+            cell = row.cells[c_idx]
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(2)
+            run = p.add_run(val)
+            set_run_font(run, size=12, is_english_mode=is_english_mode, bold=(r_idx == 0))
+
 def create_word_document(text, is_english_mode, page_images=None):
     doc = Document()
     settings = doc.settings.element
@@ -229,8 +274,20 @@ def create_word_document(text, is_english_mode, page_images=None):
         main_content = main_content.replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
 
     current_q_indent = 0  # 追蹤目前題目的縮排寬度，讓延續行(如對話)能對齊
+    lines = main_content.split('\n')
+    idx_line = 0
 
-    for line in main_content.split('\n'):
+    while idx_line < len(lines):
+        line = lines[idx_line]
+        # 偵測連續的 Markdown 表格行 (以 | 開頭與結尾)
+        if line.strip().startswith('|') and '|' in line.strip()[1:]:
+            table_buf = []
+            while idx_line < len(lines) and lines[idx_line].strip().startswith('|') and '|' in lines[idx_line].strip()[1:]:
+                table_buf.append(lines[idx_line])
+                idx_line += 1
+            add_formatted_table(doc, table_buf, current_q_indent if current_q_indent > 0 else 48, is_english_mode)
+            continue
+        idx_line += 1
         # 擷取實驗性圖片座標標記 [IMG: p, ymin, xmin, ymax, xmax]
         img_coords = []
         if page_images:
@@ -464,6 +521,7 @@ if uploaded_file is not None:
                        - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
                        - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
                        - **絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$` 或 `$\frac{1}{2}$`），請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。
+                       - 數學算式中的 `+ - × ÷ ± < > =` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝`），且算式與數字前後**不要加無謂的空白**（例如寫成 `(x＋8)(x＋5)＝`）。
                     1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
                        - [考試名稱]後面的空格一定要加上
                        - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
@@ -479,7 +537,7 @@ if uploaded_file is not None:
                        - 若選項是 1,2,3,4 或 (1)(2)(3)(4)，請轉為 ①②③④。
                        - 若選項是 (A)(B)(C)(D)，保留原樣。
                        - **務必將每個選項 (A)(B)(C)(D) 或 ①②③④ 放在新的一行**。
-                    5. 重要：忽略圖片、圖表，不要輸出圖片描述。
+                    5. 重要：忽略圖片、插圖，不要輸出圖片描述；但若題目附有**文字/數據表格**，請使用標準 Markdown 表格語法（`| 欄位1 | 欄位2 |`）完整輸出表格內容。
                     6. 如果找不到標題，請把第一行文字當作標題。
                     格式回傳（務必完整包含頭尾標記）：
                     HEADER: [標題]
