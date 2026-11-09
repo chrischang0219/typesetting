@@ -2,7 +2,7 @@ import streamlit as st
 import base64
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import io
 import os
 import requests
@@ -354,7 +354,7 @@ def create_word_document(text, is_english_mode, page_images=None):
             else:
                 line = f"{q_num}.{q_content}"
             
-            current_q_indent = 48 if need_bracket else 24
+            current_q_indent = 48 if need_bracket else 18
             p.paragraph_format.left_indent = Pt(current_q_indent)
             p.paragraph_format.first_line_indent = -Pt(current_q_indent)
             if current_sec_is_open or (not need_bracket):
@@ -709,7 +709,7 @@ with col_left:
                         st.session_state["history"].insert(0, {
                             "name": out_name,
                             "data": docx_bytes,
-                            "time": datetime.now().strftime("%H:%M:%S"),
+                            "time": datetime.now(timezone(timedelta(hours=8))).strftime("%H:%M:%S"),
                             "model": selected_model,
                             "pages": len(indices)
                         })
