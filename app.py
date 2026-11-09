@@ -511,17 +511,29 @@ button[kind="primary"]:hover {
 }
 /* 強制對齊「已載入」與「選擇頁數輸入框」的高度與邊距 */
 div[data-testid="stTextInput"] {
-    margin-top: 0 !important;
-    margin-bottom: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+div[data-testid="stTextInput"] > label {
+    display: none !important;
 }
 div[data-testid="stTextInput"] div[data-baseweb="input"] {
-    height: 40px !important;
-    min-height: 40px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    box-sizing: border-box !important;
 }
 div[data-testid="stTextInput"] input {
     height: 40px !important;
     padding-top: 0 !important;
     padding-bottom: 0 !important;
+    line-height: 40px !important;
+}
+/* 移除並排欄位內元件的預設底部間距 */
+div[data-testid="stHorizontalBlock"] div[data-testid="stElementContainer"] {
+    margin-bottom: 0 !important;
+}
+div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"] {
+    margin-bottom: 0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -586,7 +598,7 @@ with col_left:
 
             info_c1, info_c2 = st.columns([1, 1], vertical_alignment="center")
             with info_c1:
-                st.markdown(f"<div style='background-color:#1e293b; height:40px; margin:0; padding:0 0.75rem; border-radius:8px; font-size:0.9rem; border-left: 3px solid #4a688d; display:flex; align-items:center; width:100%; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>📄 已載入：<b>{uploaded_file.name}</b>（共 {total_pages} 頁）</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background-color:#1e293b; height:42px; margin:0; padding:0 0.75rem; border-radius:8px; font-size:0.9rem; border-left: 3px solid #4a688d; display:flex; align-items:center; width:100%; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>📄 已載入：<b>{uploaded_file.name}</b>（共 {total_pages} 頁）</div>", unsafe_allow_html=True)
             with info_c2:
                 page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder="輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
 
