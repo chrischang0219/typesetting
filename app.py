@@ -139,7 +139,7 @@ def remove_red_blue_marks(pil_img):
     return Image.fromarray(arr.astype(np.uint8))
 
 def add_floating_picture(paragraph, img_bytes, width_cm=4.5):
-    """將圖片插入段落並設定為『文字在前』(浮動靠右對齊)"""
+    """將圖片插入段落並設定為『矩形文繞圖』(靠右對齊，文字自動避開圖片)"""
     run = paragraph.add_run()
     inline_shape = run.add_picture(io.BytesIO(img_bytes), width=Cm(width_cm))
     inline = inline_shape._inline
@@ -164,7 +164,7 @@ def add_floating_picture(paragraph, img_bytes, width_cm=4.5):
         </wp:positionV>
         <wp:extent cx="{cx}" cy="{cy}"/>
         <wp:effectExtent l="0" t="0" r="0" b="0"/>
-        <wp:wrapNone/>
+        <wp:wrapSquare wrapText="left"/>
         <wp:docPr id="{docPr.get('id')}" name="{docPr.get('name')}"/>
         <wp:cNvGraphicFramePr>
             <a:graphicFrameLocks {nsdecls('a')} noChangeAspect="1"/>
@@ -413,7 +413,7 @@ with st.sidebar:
     st.header("⚙️ 排版設定")
     selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
     is_english_mode = st.checkbox("英文考卷模式 (啟用 Times New Roman)", value=False)
-    enable_image_crop = st.checkbox("🖼️ 實驗性：自動裁切配圖 (文字在前)", value=False)
+    enable_image_crop = st.checkbox("🖼️ 實驗性：自動裁切配圖 (矩形文繞圖)", value=False)
     
     st.divider()
     st.header("📊 今日額度與用量監控")
