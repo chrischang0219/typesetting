@@ -2,6 +2,7 @@ import streamlit as st
 import base64
 import re
 import time
+from datetime import datetime
 import io
 import os
 import requests
@@ -245,7 +246,7 @@ def create_word_document(text, is_english_mode, page_images=None):
         p.paragraph_format.line_spacing = 1.15
         p.paragraph_format.space_after = Pt(2)
 
-        match_sec = re.match(r'^\s*[一二三四五六七八九十]+、', line)
+        match_sec = re.match(r'^\s*(?:[一二三四五六七八九十]+、|【題組】|題組)', line)
         match_q = re.match(r'^\s*(\d+)\s*[.、．]\s*(.*)', line)
         match_opt = re.match(r'^\s*\([A-Da-d]\)\s*(.*)', line)
 
@@ -405,6 +406,8 @@ if "total_tokens" not in st.session_state:
     st.session_state["total_tokens"] = 0
 if "request_count" not in st.session_state:
     st.session_state["request_count"] = 0
+if "history" not in st.session_state:
+    st.session_state["history"] = []
 
 gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 
@@ -517,8 +520,18 @@ if uploaded_file is not None:
                 
                 # 將結果存入 session_state，避免下載按鈕消失
                 base_name = os.path.splitext(uploaded_file.name)[0]
+                out_name = f"{base_name}_排版完成.docx"
                 st.session_state["docx_bytes"] = docx_bytes
-                st.session_state["docx_name"] = f"{base_name}_排版完成.docx"
+                st.session_state["docx_name"] = out_name
+                st.session_state["history"].insert(0, {
+                    "name": out_name,
+                    "data": docx_bytes,
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "model": selected_model,
+                    "pages": len(indices)
+                })
+                # 最多保留最近 10 筆紀錄
+                st.session_state["history"] = st.session_state["history"][:10]
                 
                 status.update(label="🎉 全部排版完成！請點擊下方按鈕下載", state="complete", expanded=False)
             else:
@@ -527,9 +540,25 @@ if uploaded_file is not None:
 # 顯示下載按鈕
 if "docx_bytes" in st.session_state:
     st.download_button(
-        label="💾 下載 Word 檔案 (.docx)",
+        label="💾 下載最新 Word 檔案 (.docx)",
         data=st.session_state["docx_bytes"],
         file_name=st.session_state["docx_name"],
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         use_container_width=True
     )
+
+# 顯示本次轉檔歷史紀錄
+if st.session_state["history"]:
+    st.divider()
+    with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份，關閉分頁前皆可補下載）", expanded=False):
+        for i, item in enumerate(st.session_state["history"]):
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"**{item['name']}**  \n🕒 {item['time']} ｜ 📄 {item['pages']} 頁 ｜ 🧠 `{item['model']}`")
+            c2.download_button(
+                label="⬇️ 下載",
+                data=item["data"],
+                file_name=item["name"],
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key=f"hist_dl_{i}",
+                use_container_width=True
+            )
