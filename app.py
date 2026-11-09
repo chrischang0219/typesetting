@@ -433,33 +433,43 @@ def call_api_with_retry(parts, model_id, api_key, status_box):
 # ==========================================
 # 🎨 網頁介面 (Streamlit)
 # ==========================================
-st.title("📄 考卷排版神器 Pro")
+st.markdown("<h1 style='text-align: center; margin-bottom: 1rem;'>📄 考卷排版神器 Pro</h1>", unsafe_allow_html=True)
 
-# 自訂檔案上傳區文字為「拖曳檔案至此或點此上傳檔案」
+# 自訂樣式：卡片邊框、置中標題、雙行核取方塊、寬敞拖曳上傳區
 st.markdown("""
 <style>
 /* 低飽和度沉穩藍灰色系主題微調 */
 .stApp {
-    background-color: #161b22;
+    background-color: #131820;
     color: #e6edf3;
 }
-[data-testid="stVerticalBlockBorderWrapper"] {
-    background-color: #1f2630;
-    border-color: #303a48 !important;
-    border-radius: 10px;
-}
-/* 自訂檔案上傳區文字 */
-[data-testid="stFileUploaderDropzone"] {
+/* 卡片容器樣式 */
+[data-testid="stVerticalBlockBorderWrapper"] > div {
     background-color: #1b222c;
+    border-color: #2d3748 !important;
+    border-radius: 12px !important;
+}
+/* 核取方塊允許換行不截斷 */
+[data-testid="stCheckbox"] label p {
+    white-space: normal !important;
+    line-height: 1.4 !important;
+}
+/* 自訂檔案上傳區文字與高度 */
+[data-testid="stFileUploaderDropzone"] {
+    background-color: #161c24;
     border: 1.5px dashed #4a5a70;
     border-radius: 10px;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 [data-testid="stFileUploaderDropzoneInstructions"] > div > span {
     display: none;
 }
 [data-testid="stFileUploaderDropzoneInstructions"] > div::before {
-    content: "拖曳 PDF 考卷檔案至此或點此上傳檔案";
-    font-size: 1rem;
+    content: "☁️ 拖曳 PDF 考卷檔案至此或點此上傳檔案";
+    font-size: 1.05rem;
     font-weight: 500;
     color: #cfd8e3;
 }
@@ -517,156 +527,160 @@ gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 col_left, col_right = st.columns([1.6, 1], gap="large")
 
 with col_left:
-    # 綠色區域：模型選擇、英文考卷模式、實驗性功能
-    opt_c1, opt_c2, opt_c3 = st.columns([1.3, 1, 1.2])
-    with opt_c1:
-        selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
-    with opt_c2:
-        st.write("")
-        is_english_mode = st.checkbox("英文考卷模式\n(Times New Roman)", value=False)
-    with opt_c3:
-        st.write("")
-        enable_image_crop = st.checkbox("自動裁切圖片\n(測試階段)", value=False)
+    # 卡片 1：排版設定
+    with st.container(border=True):
+        st.subheader("⚙️ 排版設定")
+        opt_c1, opt_c2, opt_c3 = st.columns([1.3, 1, 1], vertical_alignment="center")
+        with opt_c1:
+            selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
+        with opt_c2:
+            st.write("")
+            is_english_mode = st.checkbox("英文考卷模式  \n(Times New Roman)", value=False)
+        with opt_c3:
+            st.write("")
+            enable_image_crop = st.checkbox("自動裁切圖片  \n(測試階段)", value=False)
 
-    # 檔案上傳區（隱藏原本標題文字）
-    uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
+    # 卡片 2：檔案上傳與解析區
+    with st.container(border=True):
+        uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
 
     if uploaded_file is not None:
-        pdf_bytes = uploaded_file.getvalue()
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        total_pages = len(doc)
+            pdf_bytes = uploaded_file.getvalue()
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            total_pages = len(doc)
 
-        st.info(f"已載入：**{uploaded_file.name}**（共 {total_pages} 頁）")
-        page_input = st.text_input("選擇頁數 (輸入頁碼或範圍如 `1-3`、`1,3`，留空則全部轉換)：", value="")
+            st.info(f"已載入：**{uploaded_file.name}**（共 {total_pages} 頁）")
+            page_input = st.text_input("選擇頁數 (輸入頁碼或範圍如 `1-3`、`1,3`，留空則全部轉換)：", value="")
 
-        if st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True):
-            indices = parse_page_selection(page_input, total_pages)
+            if st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True):
+                indices = parse_page_selection(page_input, total_pages)
 
-            with st.status("正在處理考卷，請稍候...", expanded=True) as status:
-                prompt = """
-                    請分析考卷圖片並嚴格遵守以下規則進行逐字轉錄與排版：
-                    0. **最高原則（過濾手寫與精確轉錄）**：
-                       - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
-                       - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
-                       - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
-                       - **絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$` 或 `$\frac{1}{2}$`），請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。
-                       - 數學算式中的 `+ - × ÷ ± < > =` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝`），且算式與數字前後**不要加無謂的空白**（例如寫成 `(x＋8)(x＋5)＝`）。
-                    1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
-                       - [考試名稱]後面的空格一定要加上
-                       - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
-                       - 學校只需要名稱前兩個字，考試只需要標示第一次、第二次、或第三次段考試題並且要在整行標題包含後面空格加上底線，然後要靠左對齊。
-                       - 範例：`113(一)中和                  第一次段考試題                            `。
-                    2. **選擇題 / 是非題**：
-                       - 必須在題號後加上括號 `(   )`，且括號後面**不要加空格**，直接接題目文字。
-                       - 範例：`1.(   )這是題目`。
-                    3. **填充題 / 作圖題 / 計算題**：
-                       - 題號後 **不要** 加括號，直接空格接題目。
-                       - 範例：`2. 請畫出三角形` 或 `3. ＿＿＿`。
-                    4. **選項處理**：
-                       - 若選項是 1,2,3,4 或 (1)(2)(3)(4)，請轉為 ①②③④。
-                       - 若選項是 (A)(B)(C)(D)，保留原樣。
-                       - **務必將每個選項 (A)(B)(C)(D) 或 ①②③④ 放在新的一行**。
-                    5. 重要：忽略圖片、插圖，不要輸出圖片描述；但若題目附有**文字/數據表格**，請使用標準 Markdown 表格語法（`| 欄位1 | 欄位2 |`）完整輸出表格內容。
-                    6. 如果找不到標題，請把第一行文字當作標題。
-                    格式回傳（務必完整包含頭尾標記）：
-                    HEADER: [標題]
-                    CONTENT_START
-                    ...
-                    CONTENT_END
-                    """
+                with st.status("正在處理考卷，請稍候...", expanded=True) as status:
+                    prompt = """
+                        請分析考卷圖片並嚴格遵守以下規則進行逐字轉錄與排版：
+                        0. **最高原則（過濾手寫與精確轉錄）**：
+                           - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
+                           - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
+                           - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
+                           - **絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$` 或 `$\frac{1}{2}$`），請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。
+                           - 數學算式中的 `+ - × ÷ ± < > =` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝`），且算式與數字前後**不要加無謂的空白**（例如寫成 `(x＋8)(x＋5)＝`）。
+                        1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
+                           - [考試名稱]後面的空格一定要加上
+                           - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
+                           - 學校只需要名稱前兩個字，考試只需要標示第一次、第二次、或第三次段考試題並且要在整行標題包含後面空格加上底線，然後要靠左對齊。
+                           - 範例：`113(一)中和                  第一次段考試題                            `。
+                        2. **選擇題 / 是非題**：
+                           - 必須在題號後加上括號 `(   )`，且括號後面**不要加空格**，直接接題目文字。
+                           - 範例：`1.(   )這是題目`。
+                        3. **填充題 / 作圖題 / 計算題**：
+                           - 題號後 **不要** 加括號，直接空格接題目。
+                           - 範例：`2. 請畫出三角形` 或 `3. ＿＿＿`。
+                        4. **選項處理**：
+                           - 若選項是 1,2,3,4 或 (1)(2)(3)(4)，請轉為 ①②③④。
+                           - 若選項是 (A)(B)(C)(D)，保留原樣。
+                           - **務必將每個選項 (A)(B)(C)(D) 或 ①②③④ 放在新的一行**。
+                        5. 重要：忽略圖片、插圖，不要輸出圖片描述；但若題目附有**文字/數據表格**，請使用標準 Markdown 表格語法（`| 欄位1 | 欄位2 |`）完整輸出表格內容。
+                        6. 如果找不到標題，請把第一行文字當作標題。
+                        格式回傳（務必完整包含頭尾標記）：
+                        HEADER: [標題]
+                        CONTENT_START
+                        ...
+                        CONTENT_END
+                        """
 
-                if enable_image_crop:
-                    prompt += """
-                    7. **配圖裁切座標（實驗性）**：
-                       - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
-                       - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
-                       - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
-                """
-                parts = [{"text": prompt}]
-                page_images = []
-                status.write(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
-                for idx in indices:
-                    pix = doc[idx].get_pixmap(dpi=250)
-                    jpg_bytes = pix.tobytes("jpeg")
                     if enable_image_crop:
-                        page_images.append(Image.open(io.BytesIO(jpg_bytes)).convert("RGB"))
-                    b64 = base64.b64encode(jpg_bytes).decode('utf-8')
-                    parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
-                doc.close()
+                        prompt += """
+                        7. **配圖裁切座標（實驗性）**：
+                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
+                           - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
+                           - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
+                    """
+                    parts = [{"text": prompt}]
+                    page_images = []
+                    status.write(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
+                    for idx in indices:
+                        pix = doc[idx].get_pixmap(dpi=250)
+                        jpg_bytes = pix.tobytes("jpeg")
+                        if enable_image_crop:
+                            page_images.append(Image.open(io.BytesIO(jpg_bytes)).convert("RGB"))
+                        b64 = base64.b64encode(jpg_bytes).decode('utf-8')
+                        parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
+                    doc.close()
 
-                txt, usage = call_api_with_retry(parts, selected_model, api_key, status)
+                    txt, usage = call_api_with_retry(parts, selected_model, api_key, status)
 
-                if txt:
-                    used_tokens = usage.get("totalTokenCount", 0)
-                    st.session_state["request_count"] += 1
-                    st.session_state["total_tokens"] += used_tokens
-                    if gsheet_url:
-                        log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
-                    status.write("✅ 解析成功！正在套用職人排版格式...")
-                    docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
+                    if txt:
+                        used_tokens = usage.get("totalTokenCount", 0)
+                        st.session_state["request_count"] += 1
+                        st.session_state["total_tokens"] += used_tokens
+                        if gsheet_url:
+                            log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
+                        status.write("✅ 解析成功！正在套用職人排版格式...")
+                        docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
 
-                    base_name = os.path.splitext(uploaded_file.name)[0]
-                    out_name = f"{base_name}.docx"
-                    st.session_state["docx_bytes"] = docx_bytes
-                    st.session_state["docx_name"] = out_name
-                    st.session_state["history"].insert(0, {
-                        "name": out_name,
-                        "data": docx_bytes,
-                        "time": datetime.now().strftime("%H:%M:%S"),
-                        "model": selected_model,
-                        "pages": len(indices)
-                    })
-                    st.session_state["history"] = st.session_state["history"][:10]
+                        base_name = os.path.splitext(uploaded_file.name)[0]
+                        out_name = f"{base_name}.docx"
+                        st.session_state["docx_bytes"] = docx_bytes
+                        st.session_state["docx_name"] = out_name
+                        st.session_state["history"].insert(0, {
+                            "name": out_name,
+                            "data": docx_bytes,
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                            "model": selected_model,
+                            "pages": len(indices)
+                        })
+                        st.session_state["history"] = st.session_state["history"][:10]
 
-                    status.update(label="🎉 全部排版完成！請點擊右側按鈕下載", state="complete", expanded=False)
-                else:
-                    status.update(label="❌ 轉換失敗，請更換模型或稍後重試。", state="error")
+                        status.update(label="🎉 全部排版完成！請點擊右側按鈕下載", state="complete", expanded=False)
+                    else:
+                        status.update(label="❌ 轉換失敗，請更換模型或稍後重試。", state="error")
 
 with col_right:
-    # 考卷下載區域
-    st.subheader("📥 考卷下載區")
-    if "docx_bytes" in st.session_state:
-        st.download_button(
-            label=f"⬇️ 下載：{st.session_state['docx_name']}",
-            data=st.session_state["docx_bytes"],
-            file_name=st.session_state["docx_name"],
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary",
-            use_container_width=True
-        )
-    else:
-        st.info("尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。")
+    # 卡片 3：考卷下載區
+    with st.container(border=True):
+        st.subheader("📥 考卷下載區")
+        if "docx_bytes" in st.session_state:
+            st.download_button(
+                label=f"⬇️ 下載：{st.session_state['docx_name']}",
+                data=st.session_state["docx_bytes"],
+                file_name=st.session_state["docx_name"],
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                type="primary",
+                use_container_width=True
+            )
+        else:
+            st.info("尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。")
 
-    # 本次轉檔歷史紀錄（僅保留檔名與下載鈕，垂直置中）
-    if st.session_state["history"]:
-        with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=True):
-            for i, item in enumerate(st.session_state["history"]):
-                c1, c2 = st.columns([3, 1], vertical_alignment="center")
-                c1.markdown(f"**{item['name']}**")
-                c2.download_button(
-                    label="⬇️ 下載",
-                    data=item["data"],
-                    file_name=item["name"],
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key=f"hist_dl_{i}",
-                    use_container_width=True
-                )
+        # 本次轉檔歷史紀錄（僅保留檔名與下載鈕，垂直置中）
+        if st.session_state["history"]:
+            with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=True):
+                for i, item in enumerate(st.session_state["history"]):
+                    c1, c2 = st.columns([3, 1], vertical_alignment="center")
+                    c1.markdown(f"**{item['name']}**")
+                    c2.download_button(
+                        label="⬇️ 下載",
+                        data=item["data"],
+                        file_name=item["name"],
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key=f"hist_dl_{i}",
+                        use_container_width=True
+                    )
 
-    st.divider()
 
-    # 用量監控區域（位於右側檔案下載區域下方）
-    st.subheader("📊 今日額度與用量監控")
-    global_stats = get_global_usage(gsheet_url) if gsheet_url else None
-    if global_stats is not None:
-        disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
-        disp_tokens = global_stats.get("today_tokens", global_stats.get("total_tokens", 0))
-    else:
-        disp_count = st.session_state["request_count"]
-        disp_tokens = st.session_state["total_tokens"]
+    # 卡片 4：今日額度與用量監控
+    with st.container(border=True):
+        st.subheader("📊 今日額度與用量監控")
+        global_stats = get_global_usage(gsheet_url) if gsheet_url else None
+        if global_stats is not None:
+            disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
+            disp_tokens = global_stats.get("today_tokens", global_stats.get("total_tokens", 0))
+        else:
+            disp_count = st.session_state["request_count"]
+            disp_tokens = st.session_state["total_tokens"]
 
-    st.markdown(f"<p style='font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem;'>轉檔次數：{disp_count} 次 ｜ Tokens：{disp_tokens:,}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem;'>轉檔次數：{disp_count} 次 ｜ Tokens：{disp_tokens:,}</p>", unsafe_allow_html=True)
 
-    ref_limit = 200_000
-    usage_ratio = min(disp_tokens / ref_limit, 1.0)
-    st.progress(usage_ratio, text=f"今日額度佔比 ({usage_ratio*100:.2f}%)")
-    st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
+        ref_limit = 200_000
+        usage_ratio = min(disp_tokens / ref_limit, 1.0)
+        st.progress(usage_ratio, text=f"今日額度佔比 ({usage_ratio*100:.2f}%)")
+        st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
