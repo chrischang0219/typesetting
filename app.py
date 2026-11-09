@@ -74,6 +74,9 @@ def custom_format_text(text):
     text = text.replace('\\bot', '⊥').replace('\\perp', '⊥').replace('\\parallel', '//')
     text = text.replace('\\triangle', '△').replace('\\angle', '∠').replace('^\\circ', '°').replace('\\circ', '°')
     
+    # 統一將大題標題的標點（如 二. 或 二．）轉為頓號（二、）
+    text = re.sub(r'^\s*([一二三四五六七八九十]+)\s*[、.．]\s*', r'\1、', text)
+
     # 統一轉換選項格式為 (A) (B) (C) (D)
     # 僅針對 ①②③④ 或 (1)(2)(3)(4)，避免誤殺題號 1. 2. 10.
     text = re.sub(r'^\s*(?:①|[（\(]1[）\)])\s*[.．、\s]*', '(A)', text)
@@ -278,6 +281,7 @@ def create_word_document(text, is_english_mode, page_images=None):
         main_content = main_content.replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
 
     current_q_indent = 0  # 追蹤目前題目的縮排寬度，讓延續行(如對話)能對齊
+    current_sec_is_open = False  # 追蹤目前大題是否為填充題/計算題/應用題
     lines = main_content.split('\n')
     idx_line = 0
 
@@ -307,14 +311,19 @@ def create_word_document(text, is_english_mode, page_images=None):
         p.paragraph_format.line_spacing = 1.15
         p.paragraph_format.space_after = Pt(2)
 
-        match_sec = re.match(r'^\s*(?:[一二三四五六七八九十]+、|【題組】|題組)', line)
+        match_sec = re.match(r'^\s*(?:[一二三四五六七八九十]+[、.．]|【題組】|題組)', line)
         match_q = re.match(r'^\s*(\d+)\s*[.、．]\s*(.*)', line)
         match_opt = re.match(r'^\s*\([A-Da-d]\)\s*(.*)', line)
 
+        is_open_question = False
+
         if match_sec:
-            # 大題標題（如 五、文法及對話選擇 20%）靠最左對齊，並重置題目縮排
+            # 大題標題（如 二、填充題）靠最左對齊，並重置題目縮排
             current_q_indent = 0
             line = line.strip()
+            p.paragraph_format.left_indent = Pt(0)
+            p.paragraph_format.first_line_indent = Pt(0)
+            current_sec_is_open = any(k in line for k in ["填充", "計算", "應用", "非選", "作圖", "證明"])
 
         elif match_q:
             q_num = int(match_q.group(1))
@@ -338,6 +347,8 @@ def create_word_document(text, is_english_mode, page_images=None):
             current_q_indent = 48 if need_bracket else 24
             p.paragraph_format.left_indent = Pt(current_q_indent)
             p.paragraph_format.first_line_indent = -Pt(current_q_indent)
+            if current_sec_is_open or (not need_bracket):
+                is_open_question = True
 
         elif match_opt:
             line = line.strip()
@@ -352,7 +363,18 @@ def create_word_document(text, is_english_mode, page_images=None):
             run = p.add_run(line)
             set_run_font(run, size=12, is_english_mode=is_english_mode)
 
-        # 若該題有配圖，裁切並以「文字在前」貼於右側
+        # 若為填充題、計算題或應用題，多空幾行空白行讓學生書寫；若有配圖則移到空白行右側
+        target_img_p = p
+        if is_open_question:
+            blank_lines_count = 6 if any(k in line for k in ["計算", "應用", "證明"]) else 4
+            for b_idx in range(blank_lines_count):
+                blank_p = doc.add_paragraph()
+                blank_p.paragraph_format.line_spacing = 1.15
+                blank_p.paragraph_format.space_after = Pt(2)
+                if b_idx == 0:
+                    target_img_p = blank_p
+
+        # 若該題有配圖，裁切並以「矩形文繞圖」貼於右側（開放題會貼在空白行右側）
         if img_coords and page_images:
             for p_idx, ymin, xmin, ymax, xmax in img_coords:
                 if 1 <= p_idx <= len(page_images):
@@ -367,7 +389,7 @@ def create_word_document(text, is_english_mode, page_images=None):
                         cleaned = remove_red_blue_marks(cropped)
                         img_bio = io.BytesIO()
                         cleaned.save(img_bio, format="PNG")
-                        add_floating_picture(p, img_bio.getvalue(), width_cm=4.5)
+                        add_floating_picture(target_img_p, img_bio.getvalue(), width_cm=4.5)
 
     # 將 Word 檔案存進記憶體中以便網頁下載
     bio = io.BytesIO()
