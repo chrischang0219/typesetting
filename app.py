@@ -178,7 +178,7 @@ def add_floating_picture(paragraph, img_bytes, width_cm=4.5):
         </wp:positionV>
         <wp:extent cx="{cx}" cy="{cy}"/>
         <wp:effectExtent l="0" t="0" r="0" b="0"/>
-        <wp:wrapSquare wrapText="left"/>
+        <wp:wrapNone/>
         <wp:docPr id="{docPr.get('id')}" name="{docPr.get('name')}"/>
         <wp:cNvGraphicFramePr>
             <a:graphicFrameLocks {nsdecls('a')} noChangeAspect="1"/>
@@ -282,6 +282,7 @@ def create_word_document(text, is_english_mode, page_images=None):
 
     current_q_indent = 0  # 追蹤目前題目的縮排寬度，讓延續行(如對話)能對齊
     current_sec_is_open = False  # 追蹤目前大題是否為填充題/計算題/應用題
+    pending_blank_lines = 0  # 延後到小題結束後才插入的空白行數
     lines = main_content.split('\n')
     idx_line = 0
 
@@ -317,6 +318,13 @@ def create_word_document(text, is_english_mode, page_images=None):
 
         is_open_question = False
 
+        if (match_sec or match_q) and pending_blank_lines > 0:
+            for _ in range(pending_blank_lines):
+                blank_p = doc.add_paragraph()
+                blank_p.paragraph_format.line_spacing = 1.15
+                blank_p.paragraph_format.space_after = Pt(2)
+            pending_blank_lines = 0
+
         if match_sec:
             # 大題標題（如 二、填充題）靠最左對齊，並重置題目縮排
             current_q_indent = 0
@@ -331,7 +339,7 @@ def create_word_document(text, is_english_mode, page_images=None):
             
             is_drawing = any(k in q_content for k in ["作圖", "畫出", "計算", "證明"])
             is_fill = "＿＿" in q_content or "{BLANK}" in q_content
-            need_bracket = "(   )" in line or (not is_drawing and not is_fill)
+            need_bracket = (not current_sec_is_open) and ("(   )" in line or (not is_drawing and not is_fill))
 
             if need_bracket:
                 if re.match(r'^\(\s*\)', q_content):
@@ -363,16 +371,10 @@ def create_word_document(text, is_english_mode, page_images=None):
             run = p.add_run(line)
             set_run_font(run, size=12, is_english_mode=is_english_mode)
 
-        # 若為填充題、計算題或應用題，多空幾行空白行讓學生書寫；若有配圖則移到空白行右側
+        # 若為填充題、計算題或應用題，記錄空白行數，待該題（含小題）結束後再插入
         target_img_p = p
         if is_open_question:
-            blank_lines_count = 6 if any(k in line for k in ["計算", "應用", "證明"]) else 4
-            for b_idx in range(blank_lines_count):
-                blank_p = doc.add_paragraph()
-                blank_p.paragraph_format.line_spacing = 1.15
-                blank_p.paragraph_format.space_after = Pt(2)
-                if b_idx == 0:
-                    target_img_p = blank_p
+            pending_blank_lines = 6 if any(k in line for k in ["計算", "應用", "證明"]) else 4
 
         # 若該題有配圖，裁切並以「矩形文繞圖」貼於右側（開放題會貼在空白行右側）
         if img_coords and page_images:
@@ -390,6 +392,12 @@ def create_word_document(text, is_english_mode, page_images=None):
                         img_bio = io.BytesIO()
                         cleaned.save(img_bio, format="PNG")
                         add_floating_picture(target_img_p, img_bio.getvalue(), width_cm=4.5)
+
+    if pending_blank_lines > 0:
+        for _ in range(pending_blank_lines):
+            blank_p = doc.add_paragraph()
+            blank_p.paragraph_format.line_spacing = 1.15
+            blank_p.paragraph_format.space_after = Pt(2)
 
     # 將 Word 檔案存進記憶體中以便網頁下載
     bio = io.BytesIO()
