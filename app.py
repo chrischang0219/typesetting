@@ -63,13 +63,16 @@ def parse_page_selection(s, max_p):
 def custom_format_text(text):
     text = re.sub(r'</?[ub*]+>', '', text)
     
-    # 清除 LaTeX 數學符號 ($...$, \frac, 次方等)
+    # 清除 LaTeX 數學與幾何符號 ($...$, \overline, \frac, 次方等)
     text = text.replace('$$', '').replace('$', '')
+    text = re.sub(r'\\overline\{([^}]+)\}', r'\1', text)
     text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1__UNITSLASH__\2', text)
     sup_map = {'0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹'}
     text = re.sub(r'\^\{?([0-9])\}?', lambda m: sup_map.get(m.group(1), m.group(0)), text)
     text = text.replace('\\times', '×').replace('\\div', '÷').replace('\\pm', '±')
     text = text.replace('\\leq', '≤').replace('\\geq', '≥').replace('\\neq', '≠').replace('\\approx', '≈')
+    text = text.replace('\\bot', '⊥').replace('\\perp', '⊥').replace('\\parallel', '//')
+    text = text.replace('\\triangle', '△').replace('\\angle', '∠').replace('^\\circ', '°').replace('\\circ', '°')
     
     # 統一轉換選項格式為 (A) (B) (C) (D)
     # 僅針對 ①②③④ 或 (1)(2)(3)(4)，避免誤殺題號 1. 2. 10.
@@ -91,6 +94,7 @@ def custom_format_text(text):
     # 1. 先將受保護的符號暫存
     text = re.sub(r'^(\s*\d+)\.', r'\1__QDOT__', text)          # 題號的點 (如 7.)
     text = re.sub(r'(?<=\d)\.(?=\d)', '__DECDOT__', text)        # 小數點 (如 100.0)
+    text = text.replace('//', '__PARALLEL__') # 保護平行符號 //，避免被轉成 ÷÷
     text = re.sub(r'(?<=[a-zA-Z0-9³²])/(?=[a-zA-Z0-9³²])', '__UNITSLASH__', text) # 單位斜線 (如 g/cm³)
 
     fullwidth_map = {
@@ -104,7 +108,7 @@ def custom_format_text(text):
     text = re.sub(r'\s*([＋－×÷±＜＞＝])\s*', r'\1', text)
 
     # 2. 還原受保護的符號
-    text = text.replace('__QDOT__', '.').replace('__DECDOT__', '.').replace('__UNITSLASH__', '/')
+    text = text.replace('__QDOT__', '.').replace('__DECDOT__', '.').replace('__UNITSLASH__', '/').replace('__PARALLEL__', '//')
     text = text.replace('（', '(').replace('）', ')')
     return text
 
@@ -610,7 +614,7 @@ with col_left:
                            - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
                            - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
                            - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
-                           - **絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$` 或 `$\frac{1}{2}$`），請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。
+                           - **絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$`、`\frac{1}{2}`、`\overline{AB}`、`\bot`），線段直接寫 `AB`、分數直接寫 `1/2`、垂直寫 `⊥`、平行寫 `//`，請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。
                            - 數學算式中的 `+ - × ÷ ± < > =` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝`），且算式與數字前後**不要加無謂的空白**（例如寫成 `(x＋8)(x＋5)＝`）。
                         1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
                            - [考試名稱]後面的空格一定要加上
