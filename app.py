@@ -449,15 +449,10 @@ header[data-testid="stHeader"] {
     height: 2.2rem !important;
     background: transparent !important;
 }
-/* 低飽和度沉穩藍灰色系主題 */
-.stApp {
-    background-color: #131820;
-    color: #e6edf3;
-}
-/* 卡片容器樣式與緊湊內距 */
+/* 卡片容器樣式與緊湊內距（自動相容淺色/深色模式） */
 [data-testid="stVerticalBlockBorderWrapper"] > div {
-    background-color: #1b222c;
-    border-color: #2d3748 !important;
+    background-color: var(--secondary-background-color);
+    border-color: rgba(128, 145, 168, 0.3) !important;
     border-radius: 12px !important;
     padding: 0.85rem 1rem !important;
 }
@@ -473,10 +468,10 @@ h3 {
     line-height: 1.35 !important;
     font-size: 0.92rem !important;
 }
-/* 自訂檔案上傳區文字與緊湊高度 */
+/* 自訂檔案上傳區文字與緊湊高度（自動相容淺色/深色模式） */
 [data-testid="stFileUploaderDropzone"] {
-    background-color: #161c24;
-    border: 1.5px dashed #4a5a70;
+    background-color: var(--background-color);
+    border: 1.5px dashed #4a688d;
     border-radius: 10px;
     min-height: 115px;
     padding: 0.8rem !important;
@@ -491,7 +486,7 @@ h3 {
     content: "☁️ 拖曳 PDF 考卷檔案至此或點此上傳檔案";
     font-size: 1rem;
     font-weight: 500;
-    color: #cfd8e3;
+    color: var(--text-color);
 }
 [data-testid="stFileUploaderDropzoneInstructions"] > div > small {
     display: none;
@@ -598,7 +593,7 @@ with col_left:
 
             info_c1, info_c2 = st.columns([1, 1], vertical_alignment="center")
             with info_c1:
-                st.markdown(f"<div style='background-color:#1e293b; height:42px; margin:0; padding:0 0.75rem; border-radius:8px; font-size:0.9rem; border-left: 3px solid #4a688d; display:flex; align-items:center; width:100%; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>📄 已載入：<b>{uploaded_file.name}</b>（共 {total_pages} 頁）</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='background-color:var(--background-color); color:var(--text-color); border:1px solid rgba(128,145,168,0.3); height:42px; margin:0; padding:0 0.75rem; border-radius:8px; font-size:0.9rem; border-left: 3px solid #4a688d; display:flex; align-items:center; width:100%; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>📄 已載入：<b>{uploaded_file.name}</b>（共 {total_pages} 頁）</div>", unsafe_allow_html=True)
             with info_c2:
                 page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder="輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
 
@@ -705,10 +700,10 @@ with col_right:
         if st.session_state["history"]:
             with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=True):
                 for i, item in enumerate(st.session_state["history"]):
-                    c1, c2 = st.columns([3, 1], vertical_alignment="center")
+                    c1, c2 = st.columns([2.2, 1.1], vertical_alignment="center")
                     c1.markdown(f"**{item['name']}**")
                     c2.download_button(
-                        label="⬇️ 下載",
+                        label="下載",
                         data=item["data"],
                         file_name=item["name"],
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
