@@ -402,7 +402,7 @@ def call_api_with_retry(parts, model_id, api_key, status_box):
     
     for mid in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{mid}:generateContent?key={api_key}"
-        status_box.write(f"📡 正在嘗試連線: `{mid}`...")
+        status_box.markdown(f"📡 正在嘗試連線: `{mid}`...")
         
         for attempt in range(2):
             try:
@@ -418,16 +418,16 @@ def call_api_with_retry(parts, model_id, api_key, status_box):
                     usage = data.get('usageMetadata', {})
                     return text_out, usage
                 elif res.status_code == 429:
-                    status_box.write(f"⚠️ `{mid}` 頻率限制 (429)，等待 20 秒...")
+                    status_box.markdown(f"⚠️ `{mid}` 頻率限制 (429)，等待 20 秒...")
                     time.sleep(20)
                 elif res.status_code == 503:
-                    status_box.write(f"⚠️ `{mid}` 忙碌 (503)，等待 10 秒...")
+                    status_box.markdown(f"⚠️ `{mid}` 忙碌 (503)，等待 10 秒...")
                     time.sleep(10)
                 else:
                     break
             except Exception:
                 break
-        status_box.write(f"🔄 `{mid}` 失敗，自動切換下一個可用模型...")
+        status_box.markdown(f"🔄 `{mid}` 失敗，自動切換下一個可用模型...")
     return None, {}
 
 # ==========================================
@@ -527,7 +527,9 @@ div[data-testid="stTextInput"] input {
 div[data-testid="stHorizontalBlock"] div[data-testid="stElementContainer"] {
     margin-bottom: 0 !important;
 }
-div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"] {
+div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"],
+div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"] p {
+    margin-top: 0 !important;
     margin-bottom: 0 !important;
 }
 </style>
@@ -601,6 +603,7 @@ with col_left:
                 indices = parse_page_selection(page_input, total_pages)
 
                 with st.status("正在處理考卷，請稍候...", expanded=True) as status:
+                    msg_box = st.empty()
                     prompt = """
                         請分析考卷圖片並嚴格遵守以下規則進行逐字轉錄與排版：
                         0. **最高原則（過濾手寫與精確轉錄）**：
@@ -642,7 +645,7 @@ with col_left:
                     """
                     parts = [{"text": prompt}]
                     page_images = []
-                    status.write(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
+                    msg_box.markdown(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
                     for idx in indices:
                         pix = doc[idx].get_pixmap(dpi=250)
                         jpg_bytes = pix.tobytes("jpeg")
@@ -652,7 +655,7 @@ with col_left:
                         parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
                     doc.close()
 
-                    txt, usage = call_api_with_retry(parts, selected_model, api_key, status)
+                    txt, usage = call_api_with_retry(parts, selected_model, api_key, msg_box)
 
                     if txt:
                         used_tokens = usage.get("totalTokenCount", 0)
@@ -660,7 +663,7 @@ with col_left:
                         st.session_state["total_tokens"] += used_tokens
                         if gsheet_url:
                             log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
-                        status.write("✅ 解析成功！正在套用職人排版格式...")
+                        msg_box.markdown("✅ 解析成功！正在套用職人排版格式...")
                         docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
 
                         base_name = os.path.splitext(uploaded_file.name)[0]
@@ -701,7 +704,7 @@ with col_right:
             with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=True):
                 for i, item in enumerate(st.session_state["history"]):
                     c1, c2 = st.columns([2.2, 1.1], vertical_alignment="center")
-                    c1.markdown(f"**{item['name']}**")
+                    c1.markdown(f"<div style='display:flex; align-items:center; min-height:38px; font-weight:600; word-break:break-all;'>{item['name']}</div>", unsafe_allow_html=True)
                     c2.download_button(
                         label="下載",
                         data=item["data"],
