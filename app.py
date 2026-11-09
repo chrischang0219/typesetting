@@ -37,7 +37,7 @@ VALID_MODELS = [
     "gemini-2.5-flash"       # 舊版備援 (5 RPM / 250K TPM)
 ]
 
-st.set_page_config(page_title="考卷排版神器 Pro", page_icon="📄", layout="centered")
+st.set_page_config(page_title="考卷排版神器 Pro", page_icon="📄", layout="wide")
 
 # ==========================================
 # 🛠️ 核心排版與處理函式
@@ -434,7 +434,30 @@ def call_api_with_retry(parts, model_id, api_key, status_box):
 # 🎨 網頁介面 (Streamlit)
 # ==========================================
 st.title("📄 考卷排版神器 Pro")
-st.caption("格式還原加速版 — 上傳 PDF 自動轉換為標準 Word 考卷格式")
+
+# 自訂檔案上傳區文字為「拖曳檔案至此或點此上傳檔案」
+st.markdown("""
+<style>
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span {
+    display: none;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] > div::before {
+    content: "拖曳檔案至此或點此上傳檔案";
+    font-size: 1rem;
+    font-weight: 500;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] > div > small {
+    display: none;
+}
+[data-testid="stFileUploaderDropzone"] button {
+    font-size: 0 !important;
+}
+[data-testid="stFileUploaderDropzone"] button::after {
+    content: "點此上傳";
+    font-size: 0.9rem !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # 從後台 Secrets 讀取 API Key
 api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
@@ -468,53 +491,37 @@ if "history" not in st.session_state:
 
 gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 
-# 側邊欄設定
-with st.sidebar:
-    st.header("⚙️ 排版設定")
-    selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
-    is_english_mode = st.checkbox("英文考卷模式 (啟用 Times New Roman)", value=False)
-    enable_image_crop = st.checkbox("🖼️ 實驗性：自動裁切配圖 (矩形文繞圖)", value=False)
-    
-    st.divider()
-    st.header("📊 今日額度與用量監控")
-    
-    global_stats = get_global_usage(gsheet_url) if gsheet_url else None
-    if global_stats is not None:
-        disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
-        disp_tokens = global_stats.get("today_tokens", global_stats.get("total_tokens", 0))
-        stats_note = "資料來源：Google 試算表（每日凌晨 00:00 自動歸零重算）。"
-    else:
-        disp_count = st.session_state["request_count"]
-        disp_tokens = st.session_state["total_tokens"]
-        stats_note = "註：尚未設定試算表同步，目前僅顯示本次開啟網頁後的消耗。"
+# 主版面分為左右兩欄：左側為設定與上傳區，右側為下載與用量監控區
+col_left, col_right = st.columns([1.6, 1], gap="large")
 
-    col1, col2 = st.columns(2)
-    col1.metric("今日轉檔次數", f"{disp_count} 次")
-    col2.metric("今日 Tokens", f"{disp_tokens:,}")
-    
-    # 以每日免費/參考額度 1,000,000 Tokens 作為直觀進度條基準
-    ref_limit = 1_000_000
-    usage_ratio = min(disp_tokens / ref_limit, 1.0)
-    st.progress(usage_ratio, text=f"今日額度佔比 ({usage_ratio*100:.2f}%)")
-    st.caption(stats_note)
-    st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
+with col_left:
+    # 綠色區域：模型選擇、英文考卷模式、實驗性功能
+    opt_c1, opt_c2, opt_c3 = st.columns([1.3, 1, 1.2])
+    with opt_c1:
+        selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
+    with opt_c2:
+        st.write("")
+        is_english_mode = st.checkbox("英文考卷模式 (Times New Roman)", value=False)
+    with opt_c3:
+        st.write("")
+        enable_image_crop = st.checkbox("🖼️ 實驗性：自動裁切配圖 (矩形文繞圖)", value=False)
 
-# 主畫面：上傳檔案
-uploaded_file = st.file_uploader("📁 選擇 PDF 考卷檔案", type=["pdf"])
+    # 檔案上傳區（隱藏原本標題文字）
+    uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
 
-if uploaded_file is not None:
-    pdf_bytes = uploaded_file.getvalue()
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    total_pages = len(doc)
-    
-    st.info(f"已載入：**{uploaded_file.name}**（共 {total_pages} 頁）")
-    page_input = st.text_input("選擇頁數 (輸入頁碼或範圍如 `1-3`、`1,3`，留空則全部轉換)：", value="")
+    if uploaded_file is not None:
+        pdf_bytes = uploaded_file.getvalue()
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        total_pages = len(doc)
 
-    if st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True):
-        indices = parse_page_selection(page_input, total_pages)
-        
-        with st.status("正在處理考卷，請稍候...", expanded=True) as status:
-            prompt = """
+        st.info(f"已載入：**{uploaded_file.name}**（共 {total_pages} 頁）")
+        page_input = st.text_input("選擇頁數 (輸入頁碼或範圍如 `1-3`、`1,3`，留空則全部轉換)：", value="")
+
+        if st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True):
+            indices = parse_page_selection(page_input, total_pages)
+
+            with st.status("正在處理考卷，請稍候...", expanded=True) as status:
+                prompt = """
                     請分析考卷圖片並嚴格遵守以下規則進行逐字轉錄與排版：
                     0. **最高原則（過濾手寫與精確轉錄）**：
                        - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
@@ -545,78 +552,104 @@ if uploaded_file is not None:
                     ...
                     CONTENT_END
                     """
-            
-            if enable_image_crop:
-                prompt += """
+
+                if enable_image_crop:
+                    prompt += """
                     7. **配圖裁切座標（實驗性）**：
                        - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
                        - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
                        - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
                 """
-            parts = [{"text": prompt}]
-            page_images = []
-            status.write(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
-            for idx in indices:
-                pix = doc[idx].get_pixmap(dpi=250)
-                jpg_bytes = pix.tobytes("jpeg")
-                if enable_image_crop:
-                    page_images.append(Image.open(io.BytesIO(jpg_bytes)).convert("RGB"))
-                b64 = base64.b64encode(jpg_bytes).decode('utf-8')
-                parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
-            doc.close()
+                parts = [{"text": prompt}]
+                page_images = []
+                status.write(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
+                for idx in indices:
+                    pix = doc[idx].get_pixmap(dpi=250)
+                    jpg_bytes = pix.tobytes("jpeg")
+                    if enable_image_crop:
+                        page_images.append(Image.open(io.BytesIO(jpg_bytes)).convert("RGB"))
+                    b64 = base64.b64encode(jpg_bytes).decode('utf-8')
+                    parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
+                doc.close()
 
-            txt, usage = call_api_with_retry(parts, selected_model, api_key, status)
-            
-            if txt:
-                used_tokens = usage.get("totalTokenCount", 0)
-                st.session_state["request_count"] += 1
-                st.session_state["total_tokens"] += used_tokens
-                if gsheet_url:
-                    log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
-                status.write("✅ 解析成功！正在套用職人排版格式...")
-                docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
-                
-                # 將結果存入 session_state，避免下載按鈕消失
-                base_name = os.path.splitext(uploaded_file.name)[0]
-                out_name = f"{base_name}_排版完成.docx"
-                st.session_state["docx_bytes"] = docx_bytes
-                st.session_state["docx_name"] = out_name
-                st.session_state["history"].insert(0, {
-                    "name": out_name,
-                    "data": docx_bytes,
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "model": selected_model,
-                    "pages": len(indices)
-                })
-                # 最多保留最近 10 筆紀錄
-                st.session_state["history"] = st.session_state["history"][:10]
-                
-                status.update(label="🎉 全部排版完成！請點擊下方按鈕下載", state="complete", expanded=False)
-            else:
-                status.update(label="❌ 轉換失敗，請更換模型或稍後重試。", state="error")
+                txt, usage = call_api_with_retry(parts, selected_model, api_key, status)
 
-# 顯示下載按鈕
-if "docx_bytes" in st.session_state:
-    st.download_button(
-        label="💾 下載最新 Word 檔案 (.docx)",
-        data=st.session_state["docx_bytes"],
-        file_name=st.session_state["docx_name"],
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        use_container_width=True
-    )
+                if txt:
+                    used_tokens = usage.get("totalTokenCount", 0)
+                    st.session_state["request_count"] += 1
+                    st.session_state["total_tokens"] += used_tokens
+                    if gsheet_url:
+                        log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
+                    status.write("✅ 解析成功！正在套用職人排版格式...")
+                    docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
 
-# 顯示本次轉檔歷史紀錄
-if st.session_state["history"]:
+                    base_name = os.path.splitext(uploaded_file.name)[0]
+                    out_name = f"{base_name}_排版完成.docx"
+                    st.session_state["docx_bytes"] = docx_bytes
+                    st.session_state["docx_name"] = out_name
+                    st.session_state["history"].insert(0, {
+                        "name": out_name,
+                        "data": docx_bytes,
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                        "model": selected_model,
+                        "pages": len(indices)
+                    })
+                    st.session_state["history"] = st.session_state["history"][:10]
+
+                    status.update(label="🎉 全部排版完成！請點擊右側按鈕下載", state="complete", expanded=False)
+                else:
+                    status.update(label="❌ 轉換失敗，請更換模型或稍後重試。", state="error")
+
+with col_right:
+    # 考卷下載區域
+    st.subheader("📥 考卷下載區")
+    if "docx_bytes" in st.session_state:
+        st.download_button(
+            label=f"⬇️ 下載：{st.session_state['docx_name']}",
+            data=st.session_state["docx_bytes"],
+            file_name=st.session_state["docx_name"],
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            type="primary",
+            use_container_width=True
+        )
+    else:
+        st.info("尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。")
+
+    # 本次轉檔歷史紀錄
+    if st.session_state["history"]:
+        with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=False):
+            for i, item in enumerate(st.session_state["history"]):
+                c1, c2 = st.columns([3, 1])
+                c1.markdown(f"**{item['name']}**  \n🕒 {item['time']} ｜ 📄 {item['pages']} 頁 ｜ 🧠 `{item['model']}`")
+                c2.download_button(
+                    label="⬇️ 下載",
+                    data=item["data"],
+                    file_name=item["name"],
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key=f"hist_dl_{i}",
+                    use_container_width=True
+                )
+
     st.divider()
-    with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份，關閉分頁前皆可補下載）", expanded=False):
-        for i, item in enumerate(st.session_state["history"]):
-            c1, c2 = st.columns([3, 1])
-            c1.markdown(f"**{item['name']}**  \n🕒 {item['time']} ｜ 📄 {item['pages']} 頁 ｜ 🧠 `{item['model']}`")
-            c2.download_button(
-                label="⬇️ 下載",
-                data=item["data"],
-                file_name=item["name"],
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                key=f"hist_dl_{i}",
-                use_container_width=True
-            )
+
+    # 用量監控區域（位於右側檔案下載區域下方）
+    st.subheader("📊 今日額度與用量監控")
+    global_stats = get_global_usage(gsheet_url) if gsheet_url else None
+    if global_stats is not None:
+        disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
+        disp_tokens = global_stats.get("today_tokens", global_stats.get("total_tokens", 0))
+        stats_note = "資料來源：Google 試算表（每日凌晨 00:00 自動歸零重算）。"
+    else:
+        disp_count = st.session_state["request_count"]
+        disp_tokens = st.session_state["total_tokens"]
+        stats_note = "註：尚未設定試算表同步，目前僅顯示本次開啟網頁後的消耗。"
+
+    m1, m2 = st.columns(2)
+    m1.metric("今日轉檔次數", f"{disp_count} 次")
+    m2.metric("今日 Tokens", f"{disp_tokens:,}")
+
+    ref_limit = 1_000_000
+    usage_ratio = min(disp_tokens / ref_limit, 1.0)
+    st.progress(usage_ratio, text=f"今日額度佔比 ({usage_ratio*100:.2f}%)")
+    st.caption(stats_note)
+    st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
