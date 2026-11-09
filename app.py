@@ -438,23 +438,45 @@ st.title("📄 考卷排版神器 Pro")
 # 自訂檔案上傳區文字為「拖曳檔案至此或點此上傳檔案」
 st.markdown("""
 <style>
+/* 低飽和度沉穩藍灰色系主題微調 */
+.stApp {
+    background-color: #161b22;
+    color: #e6edf3;
+}
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #1f2630;
+    border-color: #303a48 !important;
+    border-radius: 10px;
+}
+/* 自訂檔案上傳區文字 */
+[data-testid="stFileUploaderDropzone"] {
+    background-color: #1b222c;
+    border: 1.5px dashed #4a5a70;
+    border-radius: 10px;
+}
 [data-testid="stFileUploaderDropzoneInstructions"] > div > span {
     display: none;
 }
 [data-testid="stFileUploaderDropzoneInstructions"] > div::before {
-    content: "拖曳檔案至此或點此上傳檔案";
+    content: "拖曳 PDF 考卷檔案至此或點此上傳檔案";
     font-size: 1rem;
     font-weight: 500;
+    color: #cfd8e3;
 }
 [data-testid="stFileUploaderDropzoneInstructions"] > div > small {
     display: none;
 }
 [data-testid="stFileUploaderDropzone"] button {
-    font-size: 0 !important;
+    display: none;
 }
-[data-testid="stFileUploaderDropzone"] button::after {
-    content: "點此上傳";
-    font-size: 0.9rem !important;
+/* 主要按鈕沉穩藍灰色 */
+button[kind="primary"] {
+    background-color: #3b5575 !important;
+    border-color: #4a688d !important;
+    color: #ffffff !important;
+}
+button[kind="primary"]:hover {
+    background-color: #4a688d !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -501,10 +523,10 @@ with col_left:
         selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
     with opt_c2:
         st.write("")
-        is_english_mode = st.checkbox("英文考卷模式 (Times New Roman)", value=False)
+        is_english_mode = st.checkbox("英文考卷模式\n(Times New Roman)", value=False)
     with opt_c3:
         st.write("")
-        enable_image_crop = st.checkbox("🖼️ 實驗性：自動裁切配圖 (矩形文繞圖)", value=False)
+        enable_image_crop = st.checkbox("自動裁切圖片\n(測試階段)", value=False)
 
     # 檔案上傳區（隱藏原本標題文字）
     uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
@@ -584,7 +606,7 @@ with col_left:
                     docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
 
                     base_name = os.path.splitext(uploaded_file.name)[0]
-                    out_name = f"{base_name}_排版完成.docx"
+                    out_name = f"{base_name}.docx"
                     st.session_state["docx_bytes"] = docx_bytes
                     st.session_state["docx_name"] = out_name
                     st.session_state["history"].insert(0, {
@@ -615,12 +637,12 @@ with col_right:
     else:
         st.info("尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。")
 
-    # 本次轉檔歷史紀錄
+    # 本次轉檔歷史紀錄（僅保留檔名與下載鈕，垂直置中）
     if st.session_state["history"]:
-        with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=False):
+        with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=True):
             for i, item in enumerate(st.session_state["history"]):
-                c1, c2 = st.columns([3, 1])
-                c1.markdown(f"**{item['name']}**  \n🕒 {item['time']} ｜ 📄 {item['pages']} 頁 ｜ 🧠 `{item['model']}`")
+                c1, c2 = st.columns([3, 1], vertical_alignment="center")
+                c1.markdown(f"**{item['name']}**")
                 c2.download_button(
                     label="⬇️ 下載",
                     data=item["data"],
@@ -638,18 +660,13 @@ with col_right:
     if global_stats is not None:
         disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
         disp_tokens = global_stats.get("today_tokens", global_stats.get("total_tokens", 0))
-        stats_note = "資料來源：Google 試算表（每日凌晨 00:00 自動歸零重算）。"
     else:
         disp_count = st.session_state["request_count"]
         disp_tokens = st.session_state["total_tokens"]
-        stats_note = "註：尚未設定試算表同步，目前僅顯示本次開啟網頁後的消耗。"
 
-    m1, m2 = st.columns(2)
-    m1.metric("今日轉檔次數", f"{disp_count} 次")
-    m2.metric("今日 Tokens", f"{disp_tokens:,}")
+    st.markdown(f"<p style='font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem;'>轉檔次數：{disp_count} 次 ｜ Tokens：{disp_tokens:,}</p>", unsafe_allow_html=True)
 
-    ref_limit = 1_000_000
+    ref_limit = 200_000
     usage_ratio = min(disp_tokens / ref_limit, 1.0)
     st.progress(usage_ratio, text=f"今日額度佔比 ({usage_ratio*100:.2f}%)")
-    st.caption(stats_note)
     st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
