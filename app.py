@@ -91,20 +91,38 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
         m_idx = re.match(r'^__MATH_(\d+)__$', part)
         if m_idx:
             latex_inner = math_list[int(m_idx.group(1))]
-            if HAS_OMML:
+            # 判斷是否真的需要方程式編輯器（只有分數、根號、線段、上下標、向量等才轉 OMML）
+            needs_omml = any(k in latex_inner for k in ['\\frac', '\\sqrt', '\\overline', '^', '_', '\\vec', '\\sum', '\\int'])
+            if HAS_OMML and needs_omml:
                 try:
                     # 比例冒號轉全形、平行符號轉 //
                     latex_clean = latex_inner.replace(':', '：')
                     latex_clean = latex_clean.replace('\\parallel', '//').replace('||', '//')
                     mathml = latex2mathml.converter.convert(latex_clean)
                     omml_str = mathml2omml.convert(mathml)
-                    # 將短上標線 (<m:acc>) 轉為全寬線段 (<m:bar>)
+
+                    # 1. 將短上標線 (<m:acc>) 轉為全寬線段 (<m:bar>)
                     omml_str = re.sub(
-                        r'<m:acc>\s*<m:accPr>\s*<m:chr m:val="[\u00AF\u0304\u02C9¯]"/>\s*</m:accPr>\s*<m:e>(.*?)</m:e>\s*</m:acc>',
+                        r'<m:acc>\s*<m:accPr>.*?</m:accPr>\s*<m:e>(.*?)</m:e>\s*</m:acc>',
                         r'<m:bar><m:barPr><m:pos m:val="top"/></m:barPr><m:e>\1</m:e></m:bar>',
                         omml_str,
                         flags=re.DOTALL
                     )
+
+                    # 2. 隱藏根號左上角多餘的次數虛線方框 (<m:degHide m:val="1"/>)
+                    omml_str = re.sub(
+                        r'<m:rad>\s*(?!<m:radPr>)',
+                        '<m:rad><m:radPr><m:degHide m:val="1"/></m:radPr>',
+                        omml_str
+                    )
+
+                    # 3. 將方程式內的英數字強制設為正體 (<m:sty m:val="p"/>)，不要斜體
+                    omml_str = re.sub(
+                        r'<m:r>\s*(?!<m:rPr>)',
+                        '<m:r><m:rPr><m:sty m:val="p"/></m:rPr>',
+                        omml_str
+                    )
+
                     if 'xmlns:m=' not in omml_str:
                         omml_str = omml_str.replace(
                             '<m:oMath>',
@@ -116,7 +134,7 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
                     continue
                 except Exception:
                     pass
-            # 若未安裝套件或轉換失敗，優雅降級為純文字
+            # 若為單純英文字母、比例或轉換失敗，直接以純文字輸出
             fallback_txt = custom_format_text(latex_inner)
             run = p.add_run(fallback_txt)
             set_run_font(run, size=size, is_english_mode=is_english_mode, bold=bold)
@@ -707,7 +725,7 @@ with col_left:
                 with st.status("正在處理考卷，請稍候...", expanded=True) as status:
                     msg_box = st.empty()
                     math_rule_txt = (
-                        "**數學算式與幾何符號請使用標準 LaTeX 語法，並以單一 `$` 符號包夾**（例如 `$\\frac{1}{2}$`、`$\\sqrt{3}$`、`$x^2$`、`$\\overline{AB}$`、`$\\triangle ABC$`、`$\\angle A$`、`$\\perp$`），這樣系統才能轉為 Word 原生數學方程式。一般中文敘述、題號與中文標點符號請維持純文字，**不要**放進 `$` 裡面。"
+                        "**僅在分數、根號、次方、線段等複雜數學式時使用標準 LaTeX 語法並以單一 `$` 包夾**（例如 `$\\frac{1}{2}$`、`$\\sqrt{3}$`、`$x^2$`、`$\\overline{AB}$`）。單純的英文字母（如 `ABCD`、`x`）、數字比例（如 `5：6：3`）或一般中文敘述請維持純文字，**不要**放進 `$` 裡面。"
                         if enable_omml_math else
                         "**絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$`、`\\frac{1}{2}`、`\\overline{AB}`、`\\bot`），線段直接寫 `AB`、分數直接寫 `1/2`、垂直寫 `⊥`、平行寫 `//`，請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。數學算式中的 `+ - × ÷ ± < > = :` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝ ：`）。"
                     )
@@ -745,7 +763,7 @@ with col_left:
                     if enable_image_crop:
                         prompt += """
                         7. **配圖裁切座標（實驗性）**：
-                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
+                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。**請精確框選純圖形本身，切勿包含旁邊的題幹文字或選項。**
                            - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
                            - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
                     """
