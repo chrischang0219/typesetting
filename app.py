@@ -102,9 +102,9 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
             if m_bar:
                 seg_txt = m_bar.group(1)
                 omml_str = (
-                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
                     '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>'
-                    f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
+                    f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
                     '</m:bar></m:oMath>'
                 )
                 p._element.append(parse_xml(omml_str))
@@ -135,12 +135,12 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
 
                     # 3. 強制將方程式內的英數字設為正體 (<m:sty m:val="p"/>)，不要斜體
                     omml_str = re.sub(r'<m:rPr>.*?</m:rPr>', '', omml_str, flags=re.DOTALL)
-                    omml_str = re.sub(r'<m:r>', '<m:r><m:rPr><m:sty m:val="p"/></m:rPr>', omml_str)
+                    omml_str = re.sub(r'<m:r>', '<m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>', omml_str)
 
                     if 'xmlns:m=' not in omml_str:
                         omml_str = omml_str.replace(
                             '<m:oMath>',
-                            '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">',
+                            '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
                             1
                         )
                     omml_el = parse_xml(omml_str)
@@ -210,6 +210,8 @@ def custom_format_text(text):
     # 2. 還原受保護的符號
     text = text.replace('__QDOT__', '.').replace('__DECDOT__', '.').replace('__UNITSLASH__', '/').replace('__PARALLEL__', '//')
     text = text.replace('（', '(').replace('）', ')')
+    # 移除 ∠ 和 △ 後方的多餘空白（含全形空白與各種三角形符號）
+    text = re.sub(r'([∠△▵▲▽])[\s\u3000]+', r'\1', text)
     return text
 
 def set_run_font(run, size, is_english_mode, bold=False, use_title_font=False):
