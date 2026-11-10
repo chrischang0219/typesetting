@@ -540,7 +540,7 @@ def call_api_with_retry(parts, model_id, api_key):
             try:
                 res = requests.post(
                     url, 
-                    json={"contents": [{"parts": parts}], "generationConfig": {"temperature": 0.1}}, 
+                    json={"contents": [{"parts": parts}], "generationConfig": {"temperature": 0.1, "maxOutputTokens": 65536}}, 
                     timeout=600, 
                     verify=False
                 )
@@ -725,11 +725,7 @@ with col_left:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             total_pages = len(doc)
 
-            st.markdown(
-                f"<style>[data-testid='stFileUploaderFileName']::after {{ content: '（共 {total_pages} 頁）'; opacity: 0.75; font-weight: 400; }}</style>",
-                unsafe_allow_html=True
-            )
-            page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder="輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
+            page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder=f"共 {total_pages} 頁｜輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
 
             btn_c1, btn_c2 = st.columns([3, 1], vertical_alignment="center")
             with btn_c1:
