@@ -18,6 +18,12 @@ from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn, nsdecls
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_UNDERLINE, WD_TAB_ALIGNMENT
+try:
+    import latex2mathml.converter
+    import mathml2omml
+    HAS_OMML = True
+except ImportError:
+    HAS_OMML = False
 
 # 忽略 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -59,6 +65,54 @@ def parse_page_selection(s, max_p):
         return sorted(list(selected)) if selected else list(range(max_p))
     except Exception:
         return list(range(max_p))
+
+def extract_math_placeholders(text):
+    """將 $$...$$ 與 $...$ 暫存為 __MATH_i__，避免被全形標點轉換破壞 LaTeX 語法"""
+    math_list = []
+    def _repl(m):
+        idx = len(math_list)
+        math_list.append(m.group(1).strip())
+        return f"__MATH_{idx}__"
+    text = re.sub(r'\$\$(.+?)\$\$', _repl, text, flags=re.DOTALL)
+    text = re.sub(r'\$([^$]+?)\$', _repl, text)
+    return text, math_list
+
+def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_list=None):
+    """將含有 __MATH_i__ 的文字寫入段落，並把 LaTeX 轉為 Word 原生新式方程式 (OMML)"""
+    if not math_list:
+        run = p.add_run(text)
+        set_run_font(run, size=size, is_english_mode=is_english_mode, bold=bold)
+        return
+
+    parts = re.split(r'(__MATH_\d+__)', text)
+    for part in parts:
+        if not part:
+            continue
+        m_idx = re.match(r'^__MATH_(\d+)__$', part)
+        if m_idx:
+            latex_inner = math_list[int(m_idx.group(1))]
+            if HAS_OMML:
+                try:
+                    mathml = latex2mathml.converter.convert(latex_inner)
+                    omml_str = mathml2omml.convert(mathml)
+                    if 'xmlns:m=' not in omml_str:
+                        omml_str = omml_str.replace(
+                            '<m:oMath>',
+                            '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">',
+                            1
+                        )
+                    omml_el = parse_xml(omml_str)
+                    p._element.append(omml_el)
+                    continue
+                except Exception:
+                    pass
+            # 若未安裝套件或轉換失敗，優雅降級為純文字
+            fallback_txt = custom_format_text(latex_inner)
+            run = p.add_run(fallback_txt)
+            set_run_font(run, size=size, is_english_mode=is_english_mode, bold=bold)
+        else:
+            run = p.add_run(part)
+            set_run_font(run, size=size, is_english_mode=is_english_mode, bold=bold)
 
 def custom_format_text(text):
     text = re.sub(r'</?[ub*]+>', '', text)
@@ -305,6 +359,7 @@ def create_word_document(text, is_english_mode, page_images=None):
                 img_coords.append(tuple(map(int, m_img.groups())))
         line = re.sub(r'\[IMG:[^\]]*\]', '', line)
 
+        line, math_list = extract_math_placeholders(line)
         line = custom_format_text(line)
         if not line.strip() and not img_coords:
             continue
@@ -370,8 +425,7 @@ def create_word_document(text, is_english_mode, page_images=None):
                 p.paragraph_format.left_indent = Pt(current_q_indent)
 
         if line.strip():
-            run = p.add_run(line)
-            set_run_font(run, size=12, is_english_mode=is_english_mode)
+            add_text_with_equations(p, line, size=12, is_english_mode=is_english_mode, math_list=math_list)
 
         # 若為填充題、計算題或應用題，記錄空白行數，待該題（含小題）結束後再插入
         target_img_p = p
@@ -646,8 +700,8 @@ with col_left:
                            - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
                            - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
                            - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
-                           - **絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$`、`\frac{1}{2}`、`\overline{AB}`、`\bot`），線段直接寫 `AB`、分數直接寫 `1/2`、垂直寫 `⊥`、平行寫 `//`，請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。
-                           - 數學算式中的 `+ - × ÷ ± < > =` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝`），且算式與數字前後**不要加無謂的空白**（例如寫成 `(x＋8)(x＋5)＝`）。
+                           - **數學算式與幾何符號請使用標準 LaTeX 語法，並以單一 `$` 符號包夾**（例如 `$\frac{1}{2}$`、`$\sqrt{3}$`、`$x^2$`、`$\overline{AB}$`、`$\triangle ABC$`、`$\angle A$`、`$\perp$`），這樣系統才能轉為 Word 原生數學方程式。
+                           - 一般中文敘述、題號與中文標點符號請維持純文字，**不要**放進 `$` 裡面。
                         1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
                            - [考試名稱]後面的空格一定要加上
                            - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
