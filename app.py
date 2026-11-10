@@ -93,8 +93,18 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
             latex_inner = math_list[int(m_idx.group(1))]
             if HAS_OMML:
                 try:
-                    mathml = latex2mathml.converter.convert(latex_inner)
+                    # 比例冒號轉全形、平行符號轉 //
+                    latex_clean = latex_inner.replace(':', '：')
+                    latex_clean = latex_clean.replace('\\parallel', '//').replace('||', '//')
+                    mathml = latex2mathml.converter.convert(latex_clean)
                     omml_str = mathml2omml.convert(mathml)
+                    # 將短上標線 (<m:acc>) 轉為全寬線段 (<m:bar>)
+                    omml_str = re.sub(
+                        r'<m:acc>\s*<m:accPr>\s*<m:chr m:val="[\u00AF\u0304\u02C9¯]"/>\s*</m:accPr>\s*<m:e>(.*?)</m:e>\s*</m:acc>',
+                        r'<m:bar><m:barPr><m:pos m:val="top"/></m:barPr><m:e>\1</m:e></m:bar>',
+                        omml_str,
+                        flags=re.DOTALL
+                    )
                     if 'xmlns:m=' not in omml_str:
                         omml_str = omml_str.replace(
                             '<m:oMath>',
@@ -338,6 +348,8 @@ def create_word_document(text, is_english_mode, page_images=None):
     current_sec_is_open = False  # 追蹤目前大題是否為填充題/計算題/應用題
     current_sec_is_calc = False  # 追蹤目前大題是否為計算/應用/證明題（空 6 行）
     pending_blank_lines = 0  # 延後到小題結束後才插入的空白行數
+    # 保險機制：強制將同一行內的選項 (A)(B)(C)(D) 或 ①②③④ 拆成獨立的新行
+    main_content = re.sub(r'[ \t]+(?=(?:\([A-Da-d]\)|[①②③④]))', '\n', main_content)
     lines = main_content.split('\n')
     idx_line = 0
 
@@ -664,7 +676,7 @@ with col_left:
     # 卡片 1：排版設定
     with st.container(border=True):
         st.subheader("⚙️ 排版設定")
-        opt_c1, opt_c2, opt_c3 = st.columns([1.3, 1, 1], vertical_alignment="center")
+        opt_c1, opt_c2, opt_c3, opt_c4 = st.columns([1.2, 1, 1, 1], vertical_alignment="center")
         with opt_c1:
             selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
         with opt_c2:
@@ -673,6 +685,9 @@ with col_left:
         with opt_c3:
             st.write("")
             enable_image_crop = st.checkbox("自動裁切圖片  \n(測試階段)", value=False)
+        with opt_c4:
+            st.write("")
+            enable_omml_math = st.checkbox("數學方程式轉換  \n(測試階段)", value=False)
 
     # 卡片 2：檔案上傳與解析區（所有操作集中於同一張卡片內，免滾動）
     with st.container(border=True):
@@ -683,25 +698,26 @@ with col_left:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             total_pages = len(doc)
 
-            info_c1, info_c2 = st.columns([1, 1], vertical_alignment="center")
-            with info_c1:
-                st.markdown(f"<div style='background-color:var(--background-color); color:var(--text-color); border:1px solid rgba(128,145,168,0.3); height:42px; margin:0; padding:0 0.75rem; border-radius:8px; font-size:0.9rem; border-left: 3px solid #4a688d; display:flex; align-items:center; width:100%; box-sizing:border-box; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>📄 已載入：<b>{uploaded_file.name}</b>（共 {total_pages} 頁）</div>", unsafe_allow_html=True)
-            with info_c2:
-                page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder="輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
+            st.markdown(f"<div style='text-align:center; font-size:0.9rem; opacity:0.85; margin-top:-0.2rem; margin-bottom:0.4rem;'>📄 已上傳：<b>{uploaded_file.name}</b>（共 {total_pages} 頁）</div>", unsafe_allow_html=True)
+            page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder="輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
 
             if st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True):
                 indices = parse_page_selection(page_input, total_pages)
 
                 with st.status("正在處理考卷，請稍候...", expanded=True) as status:
                     msg_box = st.empty()
+                    math_rule_txt = (
+                        "**數學算式與幾何符號請使用標準 LaTeX 語法，並以單一 `$` 符號包夾**（例如 `$\\frac{1}{2}$`、`$\\sqrt{3}$`、`$x^2$`、`$\\overline{AB}$`、`$\\triangle ABC$`、`$\\angle A$`、`$\\perp$`），這樣系統才能轉為 Word 原生數學方程式。一般中文敘述、題號與中文標點符號請維持純文字，**不要**放進 `$` 裡面。"
+                        if enable_omml_math else
+                        "**絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$`、`\\frac{1}{2}`、`\\overline{AB}`、`\\bot`），線段直接寫 `AB`、分數直接寫 `1/2`、垂直寫 `⊥`、平行寫 `//`，請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。數學算式中的 `+ - × ÷ ± < > = :` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝ ：`）。"
+                    )
                     prompt = """
                         請分析考卷圖片並嚴格遵守以下規則進行逐字轉錄與排版：
                         0. **最高原則（過濾手寫與精確轉錄）**：
                            - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
                            - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
                            - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
-                           - **數學算式與幾何符號請使用標準 LaTeX 語法，並以單一 `$` 符號包夾**（例如 `$\frac{1}{2}$`、`$\sqrt{3}$`、`$x^2$`、`$\overline{AB}$`、`$\triangle ABC$`、`$\angle A$`、`$\perp$`），這樣系統才能轉為 Word 原生數學方程式。
-                           - 一般中文敘述、題號與中文標點符號請維持純文字，**不要**放進 `$` 裡面。
+                           - {math_rule_txt}
                         1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
                            - [考試名稱]後面的空格一定要加上
                            - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
@@ -733,6 +749,7 @@ with col_left:
                            - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
                            - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
                     """
+                    prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
                     parts = [{"text": prompt}]
                     page_images = []
                     msg_box.markdown(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
