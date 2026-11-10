@@ -75,6 +75,8 @@ def extract_math_placeholders(text):
         return f"__MATH_{idx}__"
     text = re.sub(r'\$\$(.+?)\$\$', _repl, text, flags=re.DOTALL)
     text = re.sub(r'\$([^$]+?)\$', _repl, text)
+    # 移除 ∠ 和 △ 後方的多餘空白
+    text = re.sub(r'([∠△])\s+', r'\1', text)
     return text, math_list
 
 def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_list=None):
@@ -98,9 +100,9 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
             if m_bar:
                 seg_txt = m_bar.group(1)
                 omml_str = (
-                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
                     '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>'
-                    f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
+                    f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
                     '</m:bar></m:oMath>'
                 )
                 p._element.append(parse_xml(omml_str))
@@ -131,12 +133,12 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
 
                     # 3. 強制將方程式內的英數字設為正體 (<m:sty m:val="p"/>)，不要斜體
                     omml_str = re.sub(r'<m:rPr>.*?</m:rPr>', '', omml_str, flags=re.DOTALL)
-                    omml_str = re.sub(r'<m:r>', '<m:r><m:rPr><m:sty m:val="p"/></m:rPr>', omml_str)
+                    omml_str = re.sub(r'<m:r>', '<m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>', omml_str)
 
                     if 'xmlns:m=' not in omml_str:
                         omml_str = omml_str.replace(
                             '<m:oMath>',
-                            '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">',
+                            '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
                             1
                         )
                     omml_el = parse_xml(omml_str)
@@ -482,10 +484,10 @@ def create_word_document(text, is_english_mode, page_images=None):
                 if 1 <= p_idx <= len(page_images):
                     src_img = page_images[p_idx - 1]
                     w, h = src_img.size
-                    left = max(0, int(xmin / 1000.0 * w) - 5)
-                    top = max(0, int(ymin / 1000.0 * h) - 5)
-                    right = min(w, int(xmax / 1000.0 * w) + 5)
-                    bottom = min(h, int(ymax / 1000.0 * h) + 5)
+                    left = max(0, int(xmin / 1000.0 * w))
+                    top = max(0, int(ymin / 1000.0 * h))
+                    right = min(w, int(xmax / 1000.0 * w))
+                    bottom = min(h, int(ymax / 1000.0 * h))
                     if right > left and bottom > top:
                         cropped = src_img.crop((left, top, right, bottom))
                         cleaned = remove_red_blue_marks(cropped)
@@ -747,6 +749,7 @@ with col_left:
                         0. **最高原則（過濾手寫與精確轉錄）**：
                            - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
                            - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
+                           - **務必完整辨識考卷上的每一道題目（包含最後的計算題、應用題、素養題與題組）**，即使題目周圍或作答欄內有手寫計算過程，也必須完整轉錄印刷體題目與所有小題，絕對不可遺漏任何大題或小題。
                            - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
                            - {math_rule_txt}
                         1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
@@ -777,7 +780,7 @@ with col_left:
                     if enable_image_crop:
                         prompt += """
                         7. **配圖裁切座標（實驗性）**：
-                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
+                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。座標務必緊貼「圖形與圖形內的字母標示」，絕對不可包含旁邊的題目文字、題號或選項。
                            - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
                            - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
                     """
