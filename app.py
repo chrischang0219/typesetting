@@ -13,6 +13,10 @@ try:
     import numpy as np
 except ImportError:
     np = None
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 from docx import Document
 from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn, nsdecls
@@ -75,8 +79,6 @@ def extract_math_placeholders(text):
         return f"__MATH_{idx}__"
     text = re.sub(r'\$\$(.+?)\$\$', _repl, text, flags=re.DOTALL)
     text = re.sub(r'\$([^$]+?)\$', _repl, text)
-    # 移除 ∠ 和 △ 後方的多餘空白
-    text = re.sub(r'([∠△])\s+', r'\1', text)
     return text, math_list
 
 def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_list=None):
@@ -100,9 +102,9 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
             if m_bar:
                 seg_txt = m_bar.group(1)
                 omml_str = (
-                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
                     '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>'
-                    f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
+                    f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
                     '</m:bar></m:oMath>'
                 )
                 p._element.append(parse_xml(omml_str))
@@ -133,12 +135,12 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
 
                     # 3. 強制將方程式內的英數字設為正體 (<m:sty m:val="p"/>)，不要斜體
                     omml_str = re.sub(r'<m:rPr>.*?</m:rPr>', '', omml_str, flags=re.DOTALL)
-                    omml_str = re.sub(r'<m:r>', '<m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>', omml_str)
+                    omml_str = re.sub(r'<m:r>', '<m:r><m:rPr><m:sty m:val="p"/></m:rPr>', omml_str)
 
                     if 'xmlns:m=' not in omml_str:
                         omml_str = omml_str.replace(
                             '<m:oMath>',
-                            '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">',
+                            '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">',
                             1
                         )
                     omml_el = parse_xml(omml_str)
@@ -246,6 +248,59 @@ def remove_red_blue_marks(pil_img):
     
     arr[mask] = [255, 255, 255]
     return Image.fromarray(arr.astype(np.uint8))
+
+def refine_diagram_crop_cv2(pil_img):
+    """使用 OpenCV 連通區塊分析，過濾周圍干擾文字行並精準貼齊圖形邊緣"""
+    if cv2 is None or np is None:
+        return pil_img
+    img_np = np.array(pil_img.convert("RGB"))
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    # 找出深色前景像素 (線條與文字)
+    _, thresh = cv2.threshold(gray, 225, 255, cv2.THRESH_BINARY_INV)
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(thresh, connectivity=8)
+    if num_labels <= 1:
+        return pil_img
+
+    # 1. 找出構成幾何圖形/裝置圖的主體大區塊 (濾掉細碎的題幹文字與選項)
+    large_boxes = []
+    all_boxes = []
+    for i in range(1, num_labels):
+        x, y, w, h, area = stats[i]
+        if area < 8:
+            continue
+        all_boxes.append((x, y, w, h, area))
+        if w >= 35 or h >= 35 or area >= 250:
+            large_boxes.append((x, y, x + w, y + h))
+
+    if not large_boxes:
+        return pil_img
+
+    # 主體圖形的聯集邊界
+    mx0 = min(b[0] for b in large_boxes)
+    my0 = min(b[1] for b in large_boxes)
+    mx1 = max(b[2] for b in large_boxes)
+    my1 = max(b[3] for b in large_boxes)
+
+    # 2. 納入緊鄰圖形邊緣的頂點字母/數字標示 (如 A, B, C, 4, 12)，排除較遠的題幹與選項文字
+    margin = 28
+    fx0, fy0, fx1, fy1 = mx0, my0, mx1, my1
+    for x, y, w, h, area in all_boxes:
+        bx0, by0, bx1, by1 = x, y, x + w, y + h
+        if bx0 >= mx0 - margin and by0 >= my0 - margin and bx1 <= mx1 + margin and by1 <= my1 + margin:
+            fx0 = min(fx0, bx0)
+            fy0 = min(fy0, by0)
+            fx1 = max(fx1, bx1)
+            fy1 = max(fy1, by1)
+
+    pad = 4
+    h_img, w_img = img_np.shape[:2]
+    fx0 = max(0, fx0 - pad)
+    fy0 = max(0, fy0 - pad)
+    fx1 = min(w_img, fx1 + pad)
+    fy1 = min(h_img, fy1 + pad)
+    if fx1 > fx0 and fy1 > fy0:
+        return Image.fromarray(img_np[fy0:fy1, fx0:fx1])
+    return pil_img
 
 def add_floating_picture(paragraph, img_bytes, width_cm=4.5):
     """將圖片插入段落並設定為『矩形文繞圖』(靠右對齊，文字自動避開圖片)"""
@@ -484,13 +539,14 @@ def create_word_document(text, is_english_mode, page_images=None):
                 if 1 <= p_idx <= len(page_images):
                     src_img = page_images[p_idx - 1]
                     w, h = src_img.size
-                    left = max(0, int(xmin / 1000.0 * w))
-                    top = max(0, int(ymin / 1000.0 * h))
-                    right = min(w, int(xmax / 1000.0 * w))
-                    bottom = min(h, int(ymax / 1000.0 * h))
+                    left = max(0, int(xmin / 1000.0 * w) - 5)
+                    top = max(0, int(ymin / 1000.0 * h) - 5)
+                    right = min(w, int(xmax / 1000.0 * w) + 5)
+                    bottom = min(h, int(ymax / 1000.0 * h) + 5)
                     if right > left and bottom > top:
                         cropped = src_img.crop((left, top, right, bottom))
                         cleaned = remove_red_blue_marks(cropped)
+                        cleaned = refine_diagram_crop_cv2(cleaned)
                         img_bio = io.BytesIO()
                         cleaned.save(img_bio, format="PNG")
                         add_floating_picture(target_img_p, img_bio.getvalue(), width_cm=4.5)
@@ -749,7 +805,6 @@ with col_left:
                         0. **最高原則（過濾手寫與精確轉錄）**：
                            - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
                            - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
-                           - **務必完整辨識考卷上的每一道題目（包含最後的計算題、應用題、素養題與題組）**，即使題目周圍或作答欄內有手寫計算過程，也必須完整轉錄印刷體題目與所有小題，絕對不可遺漏任何大題或小題。
                            - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
                            - {math_rule_txt}
                         1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
@@ -780,7 +835,7 @@ with col_left:
                     if enable_image_crop:
                         prompt += """
                         7. **配圖裁切座標（實驗性）**：
-                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。座標務必緊貼「圖形與圖形內的字母標示」，絕對不可包含旁邊的題目文字、題號或選項。
+                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
                            - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
                            - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
                     """
