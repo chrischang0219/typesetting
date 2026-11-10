@@ -3,3 +3,5 @@ PyMuPDF
 python-docx
 requests
 urllib3
+latex2mathml
+mathml2omml
