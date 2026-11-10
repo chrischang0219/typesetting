@@ -103,7 +103,7 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
 
                     # 1. 將短上標線 (<m:acc>) 轉為全寬線段 (<m:bar>)
                     omml_str = re.sub(
-                        r'<m:acc>\s*<m:accPr>.*?</m:accPr>\s*<m:e>(.*?)</m:e>\s*</m:acc>',
+                        r'<m:acc>(?:\s*<m:accPr>.*?</m:accPr>)?\s*<m:e>(.*?)</m:e>\s*</m:acc>',
                         r'<m:bar><m:barPr><m:pos m:val="top"/></m:barPr><m:e>\1</m:e></m:bar>',
                         omml_str,
                         flags=re.DOTALL
@@ -145,8 +145,9 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
 def custom_format_text(text):
     text = re.sub(r'</?[ub*]+>', '', text)
     
-    # 清除 LaTeX 數學與幾何符號 ($...$, \overline, \frac, 次方等)
+    # 清除 LaTeX 數學與幾何符號 ($...$, \text, \overline, \frac, 次方等)
     text = text.replace('$$', '').replace('$', '')
+    text = re.sub(r'\\(?:text|mathrm|mathbf|mathit)\{([^}]*)\}', r'\1', text)
     text = re.sub(r'\\overline\{([^}]+)\}', r'\1', text)
     text = re.sub(r'\\frac\{([^}]+)\}\{([^}]+)\}', r'\1__UNITSLASH__\2', text)
     sup_map = {'0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹'}
@@ -391,6 +392,9 @@ def create_word_document(text, is_english_mode, page_images=None):
 
         line, math_list = extract_math_placeholders(line)
         line = custom_format_text(line)
+        # 移除數學式前後與中文/全形標點之間的多餘空白
+        line = re.sub(r'\s+(__MATH_\d+__)', r'\1', line)
+        line = re.sub(r'(__MATH_\d+__)\s+', r'\1', line)
         if not line.strip() and not img_coords:
             continue
         
@@ -737,10 +741,11 @@ with col_left:
                            - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
                            - {math_rule_txt}
                         1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
+                           - `[年份]` 必須是民國年數字（如 `115`、`114`、`113`），**絕對不可寫成縣市名稱（如新北、台北）**。
                            - [考試名稱]後面的空格一定要加上
                            - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
-                           - 學校只需要名稱前兩個字，考試只需要標示第一次、第二次、或第三次段考試題並且要在整行標題包含後面空格加上底線，然後要靠左對齊。
-                           - 範例：`113(一)中和                  第一次段考試題                            `。
+                           - 學校只需要名稱前兩個字（如 `中和`），考試只需要標示第一次、第二次、或第三次段考試題並且要在整行標題包含後面空格加上底線，然後要靠左對齊。
+                           - 範例：`115(一)中和                  第一次段考試題                            `。
                         2. **選擇題 / 是非題**：
                            - 必須在題號後加上括號 `(   )`，且括號後面**不要加空格**，直接接題目文字。
                            - 範例：`1.(   )這是題目`。
@@ -751,7 +756,7 @@ with col_left:
                            - 若選項是 1,2,3,4 或 (1)(2)(3)(4)，請轉為 ①②③④。
                            - 若選項是 (A)(B)(C)(D)，保留原樣。
                            - **務必將每個選項 (A)(B)(C)(D) 或 ①②③④ 放在新的一行**。
-                        5. 重要：忽略圖片、插圖，不要輸出圖片描述；但若題目附有**文字/數據表格**，請使用標準 Markdown 表格語法（`| 欄位1 | 欄位2 |`）完整輸出表格內容。
+                        5. 重要：忽略圖片、插圖，不要輸出圖片描述；但若考卷或題目附有**文字/數據表格、分數對照表或配分表**，請務必使用標準 Markdown 表格語法（`| 欄位1 | 欄位2 |`）完整輸出表格內容。
                         6. 如果找不到標題，請把第一行文字當作標題。
                         格式回傳（務必完整包含頭尾標記）：
                         HEADER: [標題]
@@ -763,7 +768,7 @@ with col_left:
                     if enable_image_crop:
                         prompt += """
                         7. **配圖裁切座標（實驗性）**：
-                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。**請精確框選純圖形本身，切勿包含旁邊的題幹文字或選項。**
+                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
                            - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
                            - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
                     """
