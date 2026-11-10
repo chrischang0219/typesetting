@@ -304,6 +304,55 @@ def refine_diagram_crop_cv2(pil_img):
         return Image.fromarray(img_np[fy0:fy1, fx0:fx1])
     return pil_img
 
+def extract_diagrams_from_page_cv2(pil_img, start_id=1):
+    """使用 OpenCV 先行框出整頁中的幾何圖形/裝置圖並標上 [PIC: id] 編號"""
+    if cv2 is None or np is None:
+        return pil_img, {}
+    img_np = np.array(pil_img.convert("RGB"))
+    h_img, w_img = img_np.shape[:2]
+    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    _, thresh = cv2.threshold(gray, 220, 255, cv2.THRESH_BINARY_INV)
+
+    # 膨脹以將鄰近的圖形線條與頂點字母合併為候選區塊
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (14, 14))
+    dilated = cv2.dilate(thresh, kernel, iterations=1)
+    num_labels, _, stats, _ = cv2.connectedComponentsWithStats(dilated, connectivity=8)
+
+    candidates = []
+    for i in range(1, num_labels):
+        x, y, w, h, area = stats[i]
+        # 過濾掉單行文字 (h 較小) 與整頁外框
+        if w >= 75 and h >= 65 and not (w > w_img * 0.92 and h > h_img * 0.85):
+            candidates.append((y, x, x + w, y + h))
+
+    # 由上到下、由左到右排序
+    candidates.sort()
+
+    annotated = img_np.copy()
+    extracted_pics = {}
+    cur_id = start_id
+
+    for y0, x0, x1, y1 in candidates:
+        pad = 6
+        cx0, cy0 = max(0, x0 - pad), max(0, y0 - pad)
+        cx1, cy1 = min(w_img, x1 + pad), min(h_img, y1 + pad)
+        cropped = pil_img.crop((cx0, cy0, cx1, cy1))
+        cleaned = remove_red_blue_marks(cropped)
+        cleaned = refine_diagram_crop_cv2(cleaned)
+
+        bio = io.BytesIO()
+        cleaned.save(bio, format="PNG")
+        extracted_pics[cur_id] = bio.getvalue()
+
+        # 在給 AI 看的頁面複本上畫出紅框與醒目編號
+        cv2.rectangle(annotated, (cx0, cy0), (cx1, cy1), (220, 30, 30), 3)
+        label = f"PIC:{cur_id}"
+        cv2.rectangle(annotated, (cx0, max(0, cy0 - 28)), (cx0 + 115, cy0), (220, 30, 30), -1)
+        cv2.putText(annotated, label, (cx0 + 5, max(20, cy0 - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+        cur_id += 1
+
+    return Image.fromarray(annotated), extracted_pics
+
 def add_floating_picture(paragraph, img_bytes, width_cm=4.5):
     """將圖片插入段落並設定為『矩形文繞圖』(靠右對齊，文字自動避開圖片)"""
     run = paragraph.add_run()
@@ -382,7 +431,7 @@ def add_formatted_table(doc, table_lines, indent_pt, is_english_mode):
             run = p.add_run(val)
             set_run_font(run, size=12, is_english_mode=is_english_mode, bold=(r_idx == 0))
 
-def create_word_document(text, is_english_mode, page_images=None):
+def create_word_document(text, is_english_mode, extracted_pics=None):
     doc = Document()
     settings = doc.settings.element
     compat = settings.find(qn('w:compat')) or OxmlElement('w:compat')
@@ -452,19 +501,19 @@ def create_word_document(text, is_english_mode, page_images=None):
             add_formatted_table(doc, table_buf, current_q_indent if current_q_indent > 0 else 48, is_english_mode)
             continue
         idx_line += 1
-        # 擷取實驗性圖片座標標記 [IMG: p, ymin, xmin, ymax, xmax]
-        img_coords = []
-        if page_images:
-            for m_img in re.finditer(r'\[IMG:\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]', line):
-                img_coords.append(tuple(map(int, m_img.groups())))
-        line = re.sub(r'\[IMG:[^\]]*\]', '', line)
+        # 擷取 OpenCV 預先框選的圖片編號標記 [PIC: id]
+        pic_ids = []
+        if extracted_pics:
+            for m_pic in re.finditer(r'\[PIC:\s*(\d+)\s*\]', line):
+                pic_ids.append(int(m_pic.group(1)))
+        line = re.sub(r'\[PIC:[^\]]*\]', '', line)
 
         line, math_list = extract_math_placeholders(line)
         line = custom_format_text(line)
         # 移除數學式前後與中文/全形標點之間的多餘空白
         line = re.sub(r'\s+(__MATH_\d+__)', r'\1', line)
         line = re.sub(r'(__MATH_\d+__)\s+', r'\1', line)
-        if not line.strip() and not img_coords:
+        if not line.strip() and not pic_ids:
             continue
         
         match_sec = re.match(r'^\s*(?:[一二三四五六七八九十]+[、.．]|【題組】|題組)', line)
@@ -535,23 +584,11 @@ def create_word_document(text, is_english_mode, page_images=None):
         if is_open_question:
             pending_blank_lines = 6 if (current_sec_is_calc or any(k in line for k in ["計算", "應用", "證明"])) else 4
 
-        # 若該題有配圖，裁切並以「矩形文繞圖」貼於右側（開放題會貼在空白行右側）
-        if img_coords and page_images:
-            for p_idx, ymin, xmin, ymax, xmax in img_coords:
-                if 1 <= p_idx <= len(page_images):
-                    src_img = page_images[p_idx - 1]
-                    w, h = src_img.size
-                    left = max(0, int(xmin / 1000.0 * w) - 5)
-                    top = max(0, int(ymin / 1000.0 * h) - 5)
-                    right = min(w, int(xmax / 1000.0 * w) + 5)
-                    bottom = min(h, int(ymax / 1000.0 * h) + 5)
-                    if right > left and bottom > top:
-                        cropped = src_img.crop((left, top, right, bottom))
-                        cleaned = remove_red_blue_marks(cropped)
-                        cleaned = refine_diagram_crop_cv2(cleaned)
-                        img_bio = io.BytesIO()
-                        cleaned.save(img_bio, format="PNG")
-                        add_floating_picture(target_img_p, img_bio.getvalue(), width_cm=4.5)
+        # 若該題有配圖，直接從 OpenCV 預先裁切好的圖庫取出並貼於右側
+        if pic_ids and extracted_pics:
+            for pid in pic_ids:
+                if pid in extracted_pics:
+                    add_floating_picture(target_img_p, extracted_pics[pid], width_cm=4.5)
 
     if pending_blank_lines > 0:
         for _ in range(pending_blank_lines):
@@ -836,32 +873,64 @@ with col_left:
 
                     if enable_image_crop:
                         prompt += """
-                        7. **配圖裁切座標（實驗性）**：
-                           - 若某題目附有幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[IMG: 頁序, ymin, xmin, ymax, xmax]`（頁序從 1 開始對應本次上傳的第幾張圖，座標為 0~1000 的整數比例）。
-                           - 範例：`7.(   )已知實驗室有一個... [IMG: 1, 550, 820, 920, 980]`。
-                           - 若該題沒有配圖，則不要輸出 `[IMG: ...]`。
+                        7. **配圖編號配對**：
+                           - 圖片中已經用紅框標記並寫上 `PIC:編號`（例如 `PIC:1`、`PIC:2`）。
+                           - 若某題目附有該幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[PIC: 編號]`（例如 `[PIC: 1]`）。
+                           - 若該題沒有配圖，則不要輸出 `[PIC: ...]`。
                     """
                     prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
-                    parts = [{"text": prompt}]
-                    page_images = []
-                    for idx in indices:
-                        pix = doc[idx].get_pixmap(dpi=250)
-                        jpg_bytes = pix.tobytes("jpeg")
-                        if enable_image_crop:
-                            page_images.append(Image.open(io.BytesIO(jpg_bytes)).convert("RGB"))
-                        b64 = base64.b64encode(jpg_bytes).decode('utf-8')
-                        parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
-                    doc.close()
 
-                    txt, usage = call_api_with_retry(parts, selected_model, api_key)
+                    # 自動每 2 頁分批送出給 AI，維持最高注意力並避免後半段空白
+                    batches = [indices[i:i + 2] for i in range(0, len(indices), 2)]
+                    all_extracted_pics = {}
+                    next_pic_id = 1
+                    merged_contents = []
+                    final_header = "考卷排版結果"
+                    total_used_tokens = 0
+                    all_ok = True
+
+                    for b_idx, batch in enumerate(batches):
+                        parts = [{"text": prompt}]
+                        for idx in batch:
+                            pix = doc[idx].get_pixmap(dpi=250)
+                            jpg_bytes = pix.tobytes("jpeg")
+                            if enable_image_crop:
+                                pil_page = Image.open(io.BytesIO(jpg_bytes)).convert("RGB")
+                                annotated_page, page_pics = extract_diagrams_from_page_cv2(pil_page, start_id=next_pic_id)
+                                next_pic_id += len(page_pics)
+                                all_extracted_pics.update(page_pics)
+                                buf = io.BytesIO()
+                                annotated_page.save(buf, format="JPEG", quality=92)
+                                jpg_bytes = buf.getvalue()
+                            b64 = base64.b64encode(jpg_bytes).decode('utf-8')
+                            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
+
+                        txt_b, usage_b = call_api_with_retry(parts, selected_model, api_key)
+                        if not txt_b:
+                            all_ok = False
+                            break
+                        total_used_tokens += usage_b.get("totalTokenCount", 0)
+                        if b_idx == 0:
+                            hm = re.search(r"HEADER:\s*(.*)", txt_b)
+                            if hm:
+                                final_header = hm.group(1).strip()
+                        cm = re.search(r"CONTENT_START(.*?)CONTENT_END", txt_b, re.DOTALL)
+                        if cm:
+                            merged_contents.append(cm.group(1).strip())
+                        else:
+                            clean_b = re.sub(r"HEADER:.*\n?", "", txt_b).replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
+                            merged_contents.append(clean_b)
+
+                    doc.close()
+                    txt = f"HEADER: {final_header}\nCONTENT_START\n" + "\n".join(merged_contents) + "\nCONTENT_END" if (all_ok and merged_contents) else None
 
                     if txt:
-                        used_tokens = usage.get("totalTokenCount", 0)
+                        used_tokens = total_used_tokens
                         st.session_state["request_count"] += 1
                         st.session_state["total_tokens"] += used_tokens
                         if gsheet_url:
                             log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
-                        docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
+                        docx_bytes = create_word_document(txt, is_english_mode, extracted_pics=all_extracted_pics if enable_image_crop else None)
 
                         base_name = os.path.splitext(uploaded_file.name)[0]
                         out_name = f"{base_name}.docx"
