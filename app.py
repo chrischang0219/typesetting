@@ -93,6 +93,19 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
             latex_inner = math_list[int(m_idx.group(1))]
             # 判斷是否真的需要方程式編輯器（只有分數、根號、線段、上下標、向量等才轉 OMML）
             needs_omml = any(k in latex_inner for k in ['\\frac', '\\sqrt', '\\overline', '^', '_', '\\vec', '\\sum', '\\int'])
+            # 若為單純線段 \overline{...}，直接套用 Word 原生上方橫線 (<m:bar>) + 正體字模板
+            m_bar = re.match(r'^\\overline\{([^{}]+)\}$', latex_inner.strip())
+            if m_bar:
+                seg_txt = m_bar.group(1)
+                omml_str = (
+                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+                    '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>'
+                    f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
+                    '</m:bar></m:oMath>'
+                )
+                p._element.append(parse_xml(omml_str))
+                continue
+
             if HAS_OMML and needs_omml:
                 try:
                     # 比例冒號轉全形、平行符號轉 //
@@ -116,12 +129,9 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
                         omml_str
                     )
 
-                    # 3. 將方程式內的英數字強制設為正體 (<m:sty m:val="p"/>)，不要斜體
-                    omml_str = re.sub(
-                        r'<m:r>\s*(?!<m:rPr>)',
-                        '<m:r><m:rPr><m:sty m:val="p"/></m:rPr>',
-                        omml_str
-                    )
+                    # 3. 強制將方程式內的英數字設為正體 (<m:sty m:val="p"/>)，不要斜體
+                    omml_str = re.sub(r'<m:rPr>.*?</m:rPr>', '', omml_str, flags=re.DOTALL)
+                    omml_str = re.sub(r'<m:r>', '<m:r><m:rPr><m:sty m:val="p"/></m:rPr>', omml_str)
 
                     if 'xmlns:m=' not in omml_str:
                         omml_str = omml_str.replace(
@@ -521,13 +531,11 @@ def log_usage_to_gsheet(webhook_url, filename, pages_count, model_id, tokens):
     except Exception:
         pass
 
-def call_api_with_retry(parts, model_id, api_key, status_box):
+def call_api_with_retry(parts, model_id, api_key):
     models_to_try = [model_id] + [m for m in ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"] if m != model_id]
     
     for mid in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{mid}:generateContent?key={api_key}"
-        status_box.markdown(f"📡 正在嘗試連線: `{mid}`...")
-        
         for attempt in range(2):
             try:
                 res = requests.post(
@@ -542,16 +550,13 @@ def call_api_with_retry(parts, model_id, api_key, status_box):
                     usage = data.get('usageMetadata', {})
                     return text_out, usage
                 elif res.status_code == 429:
-                    status_box.markdown(f"⚠️ `{mid}` 頻率限制 (429)，等待 20 秒...")
                     time.sleep(20)
                 elif res.status_code == 503:
-                    status_box.markdown(f"⚠️ `{mid}` 忙碌 (503)，等待 10 秒...")
                     time.sleep(10)
                 else:
                     break
             except Exception:
                 break
-        status_box.markdown(f"🔄 `{mid}` 失敗，自動切換下一個可用模型...")
     return None, {}
 
 # ==========================================
@@ -720,16 +725,24 @@ with col_left:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             total_pages = len(doc)
 
-            st.markdown(f"<div style='text-align:center; font-size:0.9rem; opacity:0.85; margin-top:-0.2rem; margin-bottom:0.4rem;'>📄 已上傳：<b>{uploaded_file.name}</b>（共 {total_pages} 頁）</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<style>[data-testid='stFileUploaderFileName']::after {{ content: '（共 {total_pages} 頁）'; opacity: 0.75; font-weight: 400; }}</style>",
+                unsafe_allow_html=True
+            )
             page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder="輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
 
-            if st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True):
+            btn_c1, btn_c2 = st.columns([3, 1], vertical_alignment="center")
+            with btn_c1:
+                start_btn = st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True)
+            with btn_c2:
+                st.button("⏹️ 停止生成", use_container_width=True)
+
+            if start_btn:
                 indices = parse_page_selection(page_input, total_pages)
 
-                with st.status("正在處理考卷，請稍候...", expanded=True) as status:
-                    msg_box = st.empty()
+                with st.spinner("⏳ 正在處理中，請稍候..."):
                     math_rule_txt = (
-                        "**僅在分數、根號、次方、線段等複雜數學式時使用標準 LaTeX 語法並以單一 `$` 包夾**（例如 `$\\frac{1}{2}$`、`$\\sqrt{3}$`、`$x^2$`、`$\\overline{AB}$`）。單純的英文字母（如 `ABCD`、`x`）、數字比例（如 `5：6：3`）或一般中文敘述請維持純文字，**不要**放進 `$` 裡面。"
+                        "**僅在分數、根號、線段本體時使用標準 LaTeX 語法並以單一 `$` 包夾**（例如 `$\\frac{1}{2}$`、`$\\sqrt{3}$`、`$\\overline{AB}$`）。**等號、數字與其他文字絕對不要包進 `$` 裡面**（例如寫成 `$\\overline{BC}$＝1`，不可寫成 `$\\overline{BC}＝1$`）。單純的英文字母（如 `ABCD`、`x`）、數字比例（如 `5：6：3`）或一般中文敘述請維持純文字，**不要**放進 `$` 裡面。"
                         if enable_omml_math else
                         "**絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$`、`\\frac{1}{2}`、`\\overline{AB}`、`\\bot`），線段直接寫 `AB`、分數直接寫 `1/2`、垂直寫 `⊥`、平行寫 `//`，請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。數學算式中的 `+ - × ÷ ± < > = :` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝ ：`）。"
                     )
@@ -775,7 +788,6 @@ with col_left:
                     prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
                     parts = [{"text": prompt}]
                     page_images = []
-                    msg_box.markdown(f"🖼️ 正在將第 {[i+1 for i in indices]} 頁轉換為圖片...")
                     for idx in indices:
                         pix = doc[idx].get_pixmap(dpi=250)
                         jpg_bytes = pix.tobytes("jpeg")
@@ -785,7 +797,7 @@ with col_left:
                         parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
                     doc.close()
 
-                    txt, usage = call_api_with_retry(parts, selected_model, api_key, msg_box)
+                    txt, usage = call_api_with_retry(parts, selected_model, api_key)
 
                     if txt:
                         used_tokens = usage.get("totalTokenCount", 0)
@@ -793,7 +805,6 @@ with col_left:
                         st.session_state["total_tokens"] += used_tokens
                         if gsheet_url:
                             log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
-                        msg_box.markdown("✅ 解析成功！正在套用職人排版格式...")
                         docx_bytes = create_word_document(txt, is_english_mode, page_images=page_images if enable_image_crop else None)
 
                         base_name = os.path.splitext(uploaded_file.name)[0]
@@ -809,9 +820,9 @@ with col_left:
                         })
                         st.session_state["history"] = st.session_state["history"][:10]
 
-                        status.update(label="🎉 全部排版完成！請點擊右側按鈕下載", state="complete", expanded=False)
+                        st.success("🎉 全部排版完成！請點擊右側按鈕下載")
                     else:
-                        status.update(label="❌ 轉換失敗，請更換模型或稍後重試。", state="error")
+                        st.error("❌ 轉換失敗，請更換模型或稍後重試。")
 
 with col_right:
     # 卡片 3：考卷下載區
