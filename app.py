@@ -456,7 +456,7 @@ def add_formatted_table(doc, table_lines, indent_pt, is_english_mode):
             run = p.add_run(val)
             set_run_font(run, size=12, is_english_mode=is_english_mode, bold=(r_idx == 0))
 
-def create_word_document(text, is_english_mode, extracted_pics=None, answers_text=None):
+def create_word_document(text, is_english_mode, extracted_pics=None, answers_text=None, ans_title=None):
     doc = Document()
     settings = doc.settings.element
     compat = settings.find(qn('w:compat')) or OxmlElement('w:compat')
@@ -621,9 +621,9 @@ def create_word_document(text, is_english_mode, extracted_pics=None, answers_tex
             blank_p.paragraph_format.line_spacing = 1.15
             blank_p.paragraph_format.space_after = Pt(2)
 
-    # 若有辨識出解答，於考卷最下方附上【... ANS】緊湊解答
+    # 若有辨識出解答，於考卷最下方附上【檔名 ANS】緊湊解答
     if answers_text and answers_text.strip():
-        clean_ans_hdr = re.sub(r'\s+', ' ', header).strip()
+        clean_ans_hdr = ans_title.strip() if ans_title else re.sub(r'\s+', ' ', header).strip()
         ans_title_p = doc.add_paragraph()
         ans_title_p.paragraph_format.space_before = Pt(12)
         ans_title_p.paragraph_format.space_after = Pt(2)
@@ -1005,10 +1005,9 @@ with col_left:
                         st.session_state["total_tokens"] += used_tokens
                         if gsheet_url:
                             log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
-                        answers_txt = "\n".join(merged_answers) if (extract_answers and merged_answers) else None
-                        docx_bytes = create_word_document(txt, is_english_mode, extracted_pics=all_extracted_pics if enable_image_crop else None, answers_text=answers_txt)
-
                         base_name = os.path.splitext(uploaded_file.name)[0]
+                        answers_txt = "\n".join(merged_answers) if (extract_answers and merged_answers) else None
+                        docx_bytes = create_word_document(txt, is_english_mode, extracted_pics=all_extracted_pics if enable_image_crop else None, answers_text=answers_txt, ans_title=base_name)
                         out_name = f"{base_name}.docx"
                         st.session_state["docx_bytes"] = docx_bytes
                         st.session_state["docx_name"] = out_name
