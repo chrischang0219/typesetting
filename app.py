@@ -443,7 +443,7 @@ def add_formatted_table(doc, table_lines, indent_pt, is_english_mode):
             run = p.add_run(val)
             set_run_font(run, size=12, is_english_mode=is_english_mode, bold=(r_idx == 0))
 
-def create_word_document(text, is_english_mode, extracted_pics=None):
+def create_word_document(text, is_english_mode, extracted_pics=None, answers_text=None):
     doc = Document()
     settings = doc.settings.element
     compat = settings.find(qn('w:compat')) or OxmlElement('w:compat')
@@ -607,6 +607,25 @@ def create_word_document(text, is_english_mode, extracted_pics=None):
             blank_p = doc.add_paragraph()
             blank_p.paragraph_format.line_spacing = 1.15
             blank_p.paragraph_format.space_after = Pt(2)
+
+    # 若有辨識出解答，於考卷最下方附上【參考解答】
+    if answers_text and answers_text.strip():
+        ans_title_p = doc.add_paragraph()
+        ans_title_p.paragraph_format.space_before = Pt(12)
+        ans_title_p.paragraph_format.space_after = Pt(4)
+        run_at = ans_title_p.add_run("【參考解答】")
+        set_run_font(run_at, size=12, is_english_mode=is_english_mode, bold=True)
+
+        for ans_line in answers_text.strip().split('\n'):
+            ans_line = ans_line.strip()
+            if not ans_line:
+                continue
+            ans_line, ans_math = extract_math_placeholders(ans_line)
+            ans_line = custom_format_text(ans_line)
+            ans_p = doc.add_paragraph()
+            ans_p.paragraph_format.line_spacing = 1.15
+            ans_p.paragraph_format.space_after = Pt(2)
+            add_text_with_equations(ans_p, ans_line, size=12, is_english_mode=is_english_mode, math_list=ans_math)
 
     # 將 Word 檔案存進記憶體中以便網頁下載
     bio = io.BytesIO()
@@ -785,14 +804,17 @@ if app_password:
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
     if not st.session_state["authenticated"]:
-        st.info("🔒 此工具已設定存取密碼，請輸入密碼後繼續使用。")
-        pwd_input = st.text_input("請輸入通行密碼", type="password")
-        if st.button("🔓 登入", type="primary"):
-            if pwd_input == app_password:
-                st.session_state["authenticated"] = True
-                st.rerun()
-            else:
-                st.error("❌ 密碼錯誤，請重新輸入。")
+        _, login_col, _ = st.columns([1, 1.4, 1])
+        with login_col:
+            with st.container(border=True):
+                st.info("🔒 此工具已設定存取密碼，請輸入密碼後繼續使用。")
+                pwd_input = st.text_input("請輸入通行密碼", type="password", placeholder="請輸入通行密碼", label_visibility="collapsed")
+                if st.button("🔓 登入", type="primary", use_container_width=True):
+                    if pwd_input == app_password:
+                        st.session_state["authenticated"] = True
+                        st.rerun()
+                    else:
+                        st.error("❌ 密碼錯誤，請重新輸入。")
         st.stop()
 
 # 初始化本次連線用量統計（備援用）
@@ -812,7 +834,7 @@ with col_left:
     # 卡片 1：排版設定
     with st.container(border=True):
         st.subheader("⚙️ 排版設定")
-        opt_c1, opt_c2, opt_c3, opt_c4 = st.columns([1.2, 1, 1, 1], vertical_alignment="center")
+        opt_c1, opt_c2, opt_c3, opt_c4, opt_c5 = st.columns([1.3, 1, 1, 1, 1], vertical_alignment="center")
         with opt_c1:
             selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
         with opt_c2:
@@ -824,6 +846,9 @@ with col_left:
         with opt_c4:
             st.write("")
             enable_omml_math = st.checkbox("數學方程式轉換  \n(測試階段)", value=False)
+        with opt_c5:
+            st.write("")
+            extract_answers = st.checkbox("文末附帶解答  \n(辨識考卷答案)", value=False)
 
     # 卡片 2：檔案上傳與解析區（所有操作集中於同一張卡片內，免滾動）
     with st.container(border=True):
@@ -892,6 +917,18 @@ with col_left:
                            - **若紅框內是「純文字」或是「已經輸出為 Markdown 表格的文字/數據表格」，請絕對不要輸出 `[PIC: 編號]`**。
                            - 若該題沒有配圖，則不要輸出 `[PIC: ...]`。
                     """
+                    if extract_answers:
+                        prompt += """
+                        8. **辨識並彙整正確解答（附於文末）**：
+                           - 請同時辨識考卷上寫的正確解答（包含題號旁的手寫紅筆/藍筆/鉛筆答案、圈選的選項，或考卷附帶的解答區）。
+                           - 請將辨識出的答案**另外獨立輸出**在 `CONTENT_END` 之後，使用 `ANSWERS_START` 與 `ANSWERS_END` 包夾，切勿混入題目內文 `CONTENT_START ... CONTENT_END` 中。
+                           - 格式範例：
+                             ANSWERS_START
+                             一、選擇題：1.(A) 2.(C) 3.(B)
+                             二、填充題：1. 12  2. 3/4
+                             ANSWERS_END
+                           - 若該頁沒有任何解答，則不要輸出 `ANSWERS_START`。
+                    """
                     prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
 
                     # 自動每 2 頁分批送出給 AI，維持最高注意力並避免後半段空白
@@ -899,6 +936,7 @@ with col_left:
                     all_extracted_pics = {}
                     next_pic_id = 1
                     merged_contents = []
+                    merged_answers = []
                     final_header = "考卷排版結果"
                     total_used_tokens = 0
                     all_ok = True
@@ -928,11 +966,15 @@ with col_left:
                             hm = re.search(r"HEADER:\s*(.*)", txt_b)
                             if hm:
                                 final_header = hm.group(1).strip()
-                        cm = re.search(r"CONTENT_START(.*?)CONTENT_END", txt_b, re.DOTALL)
+                        am = re.search(r"ANSWERS_START(.*?)ANSWERS_END", txt_b, re.DOTALL)
+                        if am and am.group(1).strip():
+                            merged_answers.append(am.group(1).strip())
+                        txt_b_clean = re.sub(r"ANSWERS_START.*?ANSWERS_END", "", txt_b, flags=re.DOTALL)
+                        cm = re.search(r"CONTENT_START(.*?)CONTENT_END", txt_b_clean, re.DOTALL)
                         if cm:
                             merged_contents.append(cm.group(1).strip())
                         else:
-                            clean_b = re.sub(r"HEADER:.*\n?", "", txt_b).replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
+                            clean_b = re.sub(r"HEADER:.*\n?", "", txt_b_clean).replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
                             merged_contents.append(clean_b)
 
                     doc.close()
@@ -944,7 +986,8 @@ with col_left:
                         st.session_state["total_tokens"] += used_tokens
                         if gsheet_url:
                             log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
-                        docx_bytes = create_word_document(txt, is_english_mode, extracted_pics=all_extracted_pics if enable_image_crop else None)
+                        answers_txt = "\n".join(merged_answers) if (extract_answers and merged_answers) else None
+                        docx_bytes = create_word_document(txt, is_english_mode, extracted_pics=all_extracted_pics if enable_image_crop else None, answers_text=answers_txt)
 
                         base_name = os.path.splitext(uploaded_file.name)[0]
                         out_name = f"{base_name}.docx"
