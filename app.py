@@ -97,17 +97,27 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
             latex_inner = math_list[int(m_idx.group(1))]
             # 判斷是否真的需要方程式編輯器（只有分數、根號、線段、上下標、向量等才轉 OMML）
             needs_omml = any(k in latex_inner for k in ['\\frac', '\\sqrt', '\\overline', '^', '_', '\\vec', '\\sum', '\\int'])
-            # 若為單純線段 \overline{...} 或 \bar{...}，直接套用 Word 原生上方橫線 (<m:bar>) + 正體字模板
-            m_bar = re.match(r'^\\(?:overline|bar)\{\s*([^{}]+?)\s*\}$', latex_inner.strip())
-            if m_bar:
-                seg_txt = m_bar.group(1)
-                omml_str = (
-                    '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-                    '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>'
-                    f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
-                    '</m:bar></m:oMath>'
-                )
-                p._element.append(parse_xml(omml_str))
+            # 若為單純線段 \overline{...} 或 \bar{...}（即使同一組 $...$ 內有多個線段或 //、= 等符號），直接套用 Word 原生上方橫線 (<m:bar>) + 正體字模板
+            if re.search(r'\\(?:overline|bar)\{', latex_inner) and not any(k in latex_inner for k in ['\\frac', '\\sqrt', '^', '_', '\\vec', '\\sum', '\\int']):
+                sub_parts = re.split(r'(\\(?:overline|bar)\{\s*[^{}]+?\s*\})', latex_inner)
+                for sp in sub_parts:
+                    if not sp:
+                        continue
+                    m_b = re.match(r'^\\(?:overline|bar)\{\s*([^{}]+?)\s*\}$', sp)
+                    if m_b:
+                        seg_txt = m_b.group(1)
+                        omml_str = (
+                            '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+                            '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>'
+                            f'<m:e><m:r><m:rPr><m:sty m:val="p"/></m:rPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><m:t>{seg_txt}</m:t></m:r></m:e>'
+                            '</m:bar></m:oMath>'
+                        )
+                        p._element.append(parse_xml(omml_str))
+                    else:
+                        sp_txt = custom_format_text(sp)
+                        if sp_txt:
+                            run = p.add_run(sp_txt)
+                            set_run_font(run, size=size, is_english_mode=is_english_mode, bold=bold)
                 continue
 
             if HAS_OMML and needs_omml:
@@ -921,7 +931,7 @@ with col_left:
                     if extract_answers:
                         prompt += """
                         8. **辨識並彙整正確解答（附於文末）**：
-                           - 請同時辨識考卷上寫的正確解答（包含題號旁的手寫紅筆/藍筆/鉛筆答案、圈選的選項，或考卷附帶的解答區）。
+                           - **請務必仔細逐題核對**考卷上的手寫紅筆／藍筆／鉛筆答案、括號內填寫的選項字母、選項上的圈選，或考卷附帶的解答欄。**絕對不可猜測或跳號**，請一題一題看清楚括號內寫的字母（例如看清楚 D 與 B、A 與 C 的手寫筆跡）。
                            - 請將辨識出的答案**另外獨立輸出**在 `CONTENT_END` 之後，使用 `ANSWERS_START` 與 `ANSWERS_END` 包夾，切勿混入題目內文 `CONTENT_START ... CONTENT_END` 中。
                            - **請嚴格依照以下緊湊格式輸出解答**：
                              - 選擇題：只列選項字母，每 5 題空一格，例如 `【一、ADCBC ACBDA】`。
