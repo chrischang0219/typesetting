@@ -97,8 +97,8 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
             latex_inner = math_list[int(m_idx.group(1))]
             # 判斷是否真的需要方程式編輯器（只有分數、根號、線段、上下標、向量等才轉 OMML）
             needs_omml = any(k in latex_inner for k in ['\\frac', '\\sqrt', '\\overline', '^', '_', '\\vec', '\\sum', '\\int'])
-            # 若為單純線段 \overline{...}，直接套用 Word 原生上方橫線 (<m:bar>) + 正體字模板
-            m_bar = re.match(r'^\\overline\{([^{}]+)\}$', latex_inner.strip())
+            # 若為單純線段 \overline{...} 或 \bar{...}，直接套用 Word 原生上方橫線 (<m:bar>) + 正體字模板
+            m_bar = re.match(r'^\\(?:overline|bar)\{\s*([^{}]+?)\s*\}$', latex_inner.strip())
             if m_bar:
                 seg_txt = m_bar.group(1)
                 omml_str = (
@@ -608,13 +608,14 @@ def create_word_document(text, is_english_mode, extracted_pics=None, answers_tex
             blank_p.paragraph_format.line_spacing = 1.15
             blank_p.paragraph_format.space_after = Pt(2)
 
-    # 若有辨識出解答，於考卷最下方附上【參考解答】
+    # 若有辨識出解答，於考卷最下方附上【... ANS】緊湊解答
     if answers_text and answers_text.strip():
+        clean_ans_hdr = re.sub(r'\s+', ' ', header).strip()
         ans_title_p = doc.add_paragraph()
         ans_title_p.paragraph_format.space_before = Pt(12)
-        ans_title_p.paragraph_format.space_after = Pt(4)
-        run_at = ans_title_p.add_run("【參考解答】")
-        set_run_font(run_at, size=12, is_english_mode=is_english_mode, bold=True)
+        ans_title_p.paragraph_format.space_after = Pt(2)
+        run_at = ans_title_p.add_run(f"【{clean_ans_hdr} ANS】")
+        set_run_font(run_at, size=12, is_english_mode=is_english_mode, bold=False)
 
         for ans_line in answers_text.strip().split('\n'):
             ans_line = ans_line.strip()
@@ -914,7 +915,7 @@ with col_left:
                         7. **配圖編號配對**：
                            - 圖片中已經用紅框標記並寫上 `PIC:編號`（例如 `PIC:1`、`PIC:2`）。
                            - 若某題目附有該幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[PIC: 編號]`（例如 `[PIC: 1]`）。
-                           - **若紅框內是「純文字」或是「已經輸出為 Markdown 表格的文字/數據表格」，請絕對不要輸出 `[PIC: 編號]`**。
+                           - **若紅框內是「手寫筆跡／手寫計算過程」、「純文字」、「空白作答欄框線」或是「已經輸出為 Markdown 表格的文字/數據表格」，請絕對不要輸出 `[PIC: 編號]`**。只針對「印刷體的幾何圖形、實驗裝置圖或圖表」輸出 `[PIC: 編號]`。
                            - 若該題沒有配圖，則不要輸出 `[PIC: ...]`。
                     """
                     if extract_answers:
@@ -922,11 +923,9 @@ with col_left:
                         8. **辨識並彙整正確解答（附於文末）**：
                            - 請同時辨識考卷上寫的正確解答（包含題號旁的手寫紅筆/藍筆/鉛筆答案、圈選的選項，或考卷附帶的解答區）。
                            - 請將辨識出的答案**另外獨立輸出**在 `CONTENT_END` 之後，使用 `ANSWERS_START` 與 `ANSWERS_END` 包夾，切勿混入題目內文 `CONTENT_START ... CONTENT_END` 中。
-                           - 格式範例：
-                             ANSWERS_START
-                             一、選擇題：1.(A) 2.(C) 3.(B)
-                             二、填充題：1. 12  2. 3/4
-                             ANSWERS_END
+                           - **請嚴格依照以下緊湊格式輸出解答**：
+                             - 選擇題：只列選項字母，每 5 題空一格，例如 `【一、ADCBC ACBDA】`。
+                             - 填充題／計算題：只列最後答案（不寫算式過程），題號用 `(1)` 或 `(2-1)` 緊接答案、各題之間空一格，例如 `【二、(1)0 (2-1)$\frac{\sqrt{2}}{5}$ (2-2)$2\sqrt{2}-\sqrt{3}$】`、`【三、(1)1 (2)$\frac{3}{4}$】`。
                            - 若該頁沒有任何解答，則不要輸出 `ANSWERS_START`。
                     """
                     prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
