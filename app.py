@@ -97,15 +97,16 @@ def add_text_with_equations(p, text, size, is_english_mode, bold=False, math_lis
             latex_inner = math_list[int(m_idx.group(1))]
             # 判斷是否真的需要方程式編輯器（只有分數、根號、線段、上下標、向量等才轉 OMML）
             needs_omml = any(k in latex_inner for k in ['\\frac', '\\sqrt', '\\overline', '^', '_', '\\vec', '\\sum', '\\int'])
-            # 若為單純線段 \overline{...} 或 \bar{...}（即使同一組 $...$ 內有多個線段或 //、= 等符號），直接套用 Word 原生上方橫線 (<m:bar>) + 正體字模板
-            if re.search(r'\\(?:overline|bar)\{', latex_inner) and not any(k in latex_inner for k in ['\\frac', '\\sqrt', '^', '_', '\\vec', '\\sum', '\\int']):
-                sub_parts = re.split(r'(\\(?:overline|bar)\{\s*[^{}]+?\s*\})', latex_inner)
+            # 若為單純線段 \overline{...} 或 \bar{...}（即使內含 \text{} 或同一組 $...$ 內有多個線段），直接套用 Word 原生上方橫線 (<m:bar>) + 正體字模板
+            latex_norm = re.sub(r'\\(?:text|mathrm|mathbf|mathit)\{([^{}]*)\}', r'\1', latex_inner)
+            if re.search(r'\\(?:overline|bar)\{', latex_norm) and not any(k in latex_norm for k in ['\\frac', '\\sqrt', '^', '_', '\\vec', '\\sum', '\\int']):
+                sub_parts = re.split(r'(\\(?:overline|bar)\{\s*[^{}]+?\s*\})', latex_norm)
                 for sp in sub_parts:
                     if not sp:
                         continue
                     m_b = re.match(r'^\\(?:overline|bar)\{\s*([^{}]+?)\s*\}$', sp)
                     if m_b:
-                        seg_txt = m_b.group(1)
+                        seg_txt = m_b.group(1).strip()
                         omml_str = (
                             '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
                             '<m:bar><m:barPr><m:pos m:val="top"/></m:barPr>'
@@ -320,7 +321,9 @@ def extract_diagrams_from_page_cv2(pil_img, start_id=1):
         return pil_img, {}
     img_np = np.array(pil_img.convert("RGB"))
     h_img, w_img = img_np.shape[:2]
-    gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+    # 先濾除紅藍手寫筆跡，再做灰階與膨脹，避免手寫大括號或筆記被誤框為圖形
+    cleaned_full = remove_red_blue_marks(pil_img)
+    gray = cv2.cvtColor(np.array(cleaned_full), cv2.COLOR_RGB2GRAY)
     _, thresh = cv2.threshold(gray, 220, 255, cv2.THRESH_BINARY_INV)
 
     # 膨脹以將鄰近的圖形線條與頂點字母合併為候選區塊
@@ -331,8 +334,8 @@ def extract_diagrams_from_page_cv2(pil_img, start_id=1):
     candidates = []
     for i in range(1, num_labels):
         x, y, w, h, area = stats[i]
-        # 過濾掉單行文字 (h 較小) 與整頁外框
-        if w >= 75 and h >= 65 and not (w > w_img * 0.92 and h > h_img * 0.85):
+        # 過濾掉單行文字、細長括號與整頁外框
+        if w >= 90 and h >= 75 and area >= 1500 and not (w > w_img * 0.92 and h > h_img * 0.85):
             candidates.append((y, x, x + w, y + h))
 
     # 由上到下、由左到右排序
@@ -928,16 +931,7 @@ with col_left:
                            - **若紅框內是「手寫筆跡／手寫計算過程」、「純文字」、「空白作答欄框線」或是「已經輸出為 Markdown 表格的文字/數據表格」，請絕對不要輸出 `[PIC: 編號]`**。只針對「印刷體的幾何圖形、實驗裝置圖或圖表」輸出 `[PIC: 編號]`。
                            - 若該題沒有配圖，則不要輸出 `[PIC: ...]`。
                     """
-                    if extract_answers:
-                        prompt += """
-                        8. **辨識並彙整正確解答（附於文末）**：
-                           - **請務必仔細逐題核對**考卷上的手寫紅筆／藍筆／鉛筆答案、括號內填寫的選項字母、選項上的圈選，或考卷附帶的解答欄。**絕對不可猜測或跳號**，請一題一題看清楚括號內寫的字母（例如看清楚 D 與 B、A 與 C 的手寫筆跡）。
-                           - 請將辨識出的答案**另外獨立輸出**在 `CONTENT_END` 之後，使用 `ANSWERS_START` 與 `ANSWERS_END` 包夾，切勿混入題目內文 `CONTENT_START ... CONTENT_END` 中。
-                           - **請嚴格依照以下緊湊格式輸出解答**：
-                             - 選擇題：只列選項字母，每 5 題空一格，例如 `【一、ADCBC ACBDA】`。
-                             - 填充題／計算題：只列最後答案（不寫算式過程），題號用 `(1)` 或 `(2-1)` 緊接答案、各題之間空一格，例如 `【二、(1)0 (2-1)$\frac{\sqrt{2}}{5}$ (2-2)$2\sqrt{2}-\sqrt{3}$】`、`【三、(1)1 (2)$\frac{3}{4}$】`。
-                           - 若該頁沒有任何解答，則不要輸出 `ANSWERS_START`。
-                    """
+
                     prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
 
                     # 自動每 2 頁分批送出給 AI，維持最高注意力並避免後半段空白
@@ -985,6 +979,22 @@ with col_left:
                         else:
                             clean_b = re.sub(r"HEADER:.*\n?", "", txt_b_clean).replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
                             merged_contents.append(clean_b)
+
+                    if all_ok and extract_answers:
+                        ans_prompt = """請只專心辨識這幾頁考卷上的「正確解答」（包含題號旁手寫紅筆／藍筆／鉛筆寫的答案、括號內的選項字母、圈選的選項，或考卷附帶的解答區）。
+                        **不要輸出題目文字**，請嚴格依照以下緊湊格式逐大題輸出：
+                        - 選擇題：只列選項字母，每 5 題空一格，例如 `【一、ADCBC ACBDA】`。
+                        - 填充題／計算題：只列最後答案（不寫算式過程），題號用 `(1)` 或 `(2-1)` 緊接答案、各題之間空一格，例如 `【二、(1)0 (2-1)$\frac{\sqrt{2}}{5}$ (2-2)$2\sqrt{2}-\sqrt{3}$】`。
+                        請一題一題看清楚括號內手寫字母（特別區分 D 與 B、A 與 C），絕對不可猜測或跳號。若完全沒有解答則輸出空字串。"""
+                        ans_parts = [{"text": ans_prompt}]
+                        for idx in indices:
+                            pix = doc[idx].get_pixmap(dpi=250)
+                            b64 = base64.b64encode(pix.tobytes("jpeg")).decode('utf-8')
+                            ans_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
+                        ans_out, ans_usage = call_api_with_retry(ans_parts, selected_model, api_key)
+                        if ans_out and ans_out.strip():
+                            total_used_tokens += ans_usage.get("totalTokenCount", 0)
+                            merged_answers = [ans_out.strip()]
 
                     doc.close()
                     txt = f"HEADER: {final_header}\nCONTENT_START\n" + "\n".join(merged_contents) + "\nCONTENT_END" if (all_ok and merged_contents) else None
