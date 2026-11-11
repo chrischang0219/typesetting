@@ -753,11 +753,25 @@ h3 {
 [data-testid="stFileUploaderDropzoneInstructions"] > div > span {
     display: none;
 }
+[data-testid="stFileUploaderDropzoneInstructions"] {
+    width: 100% !important;
+    margin: 0 !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    text-align: center !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] > div {
+    width: 100% !important;
+    text-align: center !important;
+}
 [data-testid="stFileUploaderDropzoneInstructions"] > div::before {
     content: "☁️ 拖曳 PDF 考卷檔案至此或點此上傳檔案";
     font-size: 1rem;
     font-weight: 500;
     color: var(--text-color);
+    display: block;
+    text-align: center;
 }
 [data-testid="stFileUploaderDropzoneInstructions"] > div > small {
     display: none;
@@ -847,21 +861,22 @@ col_left, col_right = st.columns([1.6, 1], gap="large")
 with col_left:
     # 卡片 1：排版設定
     with st.container(border=True):
-        st.subheader("⚙️ 排版設定")
-        opt_c1, opt_c2, opt_c3, opt_c4, opt_c5 = st.columns([1.3, 1, 1, 1, 1], vertical_alignment="center")
+        hdr_c1, hdr_c2, hdr_c3 = st.columns([1.2, 0.7, 1.5], vertical_alignment="center")
+        with hdr_c1:
+            st.subheader("⚙️ 排版設定")
+        with hdr_c2:
+            st.markdown("<div style='text-align:right; font-size:0.92rem; font-weight:600;'>🧠 AI 模型：</div>", unsafe_allow_html=True)
+        with hdr_c3:
+            selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0, label_visibility="collapsed")
+
+        opt_c1, opt_c2, opt_c3, opt_c4 = st.columns(4, vertical_alignment="top")
         with opt_c1:
-            selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0)
-        with opt_c2:
-            st.write("")
             is_english_mode = st.checkbox("英文考卷模式  \n(Times New Roman)", value=False)
-        with opt_c3:
-            st.write("")
+        with opt_c2:
             enable_image_crop = st.checkbox("自動裁切圖片  \n(測試階段)", value=False)
-        with opt_c4:
-            st.write("")
+        with opt_c3:
             enable_omml_math = st.checkbox("數學方程式轉換  \n(測試階段)", value=False)
-        with opt_c5:
-            st.write("")
+        with opt_c4:
             extract_answers = st.checkbox("文末附帶解答  \n(辨識考卷答案)", value=False)
 
     # 卡片 2：檔案上傳與解析區（所有操作集中於同一張卡片內，免滾動）
