@@ -333,6 +333,18 @@ def extract_diagrams_from_page_cv2(pil_img, start_id=1):
     cur_id = start_id
 
     for y0, x0, x1, y1 in candidates:
+        # 檢查該區域內是否真的有構成圖形的「大元件」（排除兩行文字黏在一起或純中文字）
+        roi_thresh = thresh[y0:y1, x0:x1]
+        n_sub, _, sub_stats, _ = cv2.connectedComponentsWithStats(roi_thresh, connectivity=8)
+        has_diagram_stroke = False
+        for j in range(1, n_sub):
+            sw, sh, sarea = sub_stats[j, cv2.CC_STAT_WIDTH], sub_stats[j, cv2.CC_STAT_HEIGHT], sub_stats[j, cv2.CC_STAT_AREA]
+            if sw >= 55 or sh >= 55 or sarea >= 450:
+                has_diagram_stroke = True
+                break
+        if not has_diagram_stroke:
+            continue
+
         pad = 6
         cx0, cy0 = max(0, x0 - pad), max(0, y0 - pad)
         cx1, cy1 = min(w_img, x1 + pad), min(h_img, y1 + pad)
@@ -844,6 +856,7 @@ with col_left:
                         0. **最高原則（過濾手寫與精確轉錄）**：
                            - **完全忽略所有手寫筆跡**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程或塗鴉），只辨識原本的**印刷體文字**。
                            - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
+                           - **若考卷後方附有「答案卷／作答卷」（上面印有計算題、應用題或非選擇題的題目），請務必將答案卷上的所有印刷體題目與小題完整轉錄出來，絕對不可只輸出答案卷標題就結束。**
                            - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
                            - {math_rule_txt}
                         1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
@@ -876,6 +889,7 @@ with col_left:
                         7. **配圖編號配對**：
                            - 圖片中已經用紅框標記並寫上 `PIC:編號`（例如 `PIC:1`、`PIC:2`）。
                            - 若某題目附有該幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[PIC: 編號]`（例如 `[PIC: 1]`）。
+                           - **若紅框內是「純文字」或是「已經輸出為 Markdown 表格的文字/數據表格」，請絕對不要輸出 `[PIC: 編號]`**。
                            - 若該題沒有配圖，則不要輸出 `[PIC: ...]`。
                     """
                     prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
