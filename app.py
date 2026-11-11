@@ -733,11 +733,11 @@ h3 {
     margin-bottom: 0.4rem !important;
     font-size: 1.1rem !important;
 }
-/* 核取方塊允許換行不截斷 */
+/* 核取方塊允許換行不截斷，但單行內不自動折行 */
 [data-testid="stCheckbox"] label p {
-    white-space: normal !important;
+    white-space: nowrap !important;
     line-height: 1.35 !important;
-    font-size: 0.92rem !important;
+    font-size: 0.9rem !important;
 }
 /* 自訂檔案上傳區文字與緊湊高度（自動相容淺色/深色模式） */
 [data-testid="stFileUploaderDropzone"] {
@@ -869,7 +869,7 @@ with col_left:
         with hdr_c3:
             selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0, label_visibility="collapsed")
 
-        opt_c1, opt_c2, opt_c3, opt_c4 = st.columns(4, vertical_alignment="top")
+        opt_c1, opt_c2, opt_c3, opt_c4 = st.columns([1.28, 0.9, 1.0, 0.92], vertical_alignment="top")
         with opt_c1:
             is_english_mode = st.checkbox("英文考卷模式  \n(Times New Roman)", value=False)
         with opt_c2:
