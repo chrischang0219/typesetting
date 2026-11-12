@@ -39,12 +39,10 @@ DOC_TITLE_FONT = "王漢宗顏楷體繁"
 DOC_CHINESE_FONT = "標楷體"
 DOC_ENGLISH_FONT = "Times New Roman"
 VALID_MODELS = [
-    "gemini-3.8-flash",      # 推薦：最新主力，辨識精準度高 (5 RPM / 250K TPM)
-    "gemini-3.6-flash",      # 備用主力：同等級高精準度 (5 RPM / 250K TPM)
-    "gemini-3.5-flash-lite", # 省額度首選：速度極快、每分鐘上限高 (15 RPM / 250K TPM)
-    "gemini-3.1-flash-lite", # 輕量備援：同樣享有高每分鐘次數 (15 RPM / 250K TPM)
-    "gemini-2.5-flash-lite", # 穩定輕量版 (10 RPM / 250K TPM)
-    "gemini-2.5-flash"       # 舊版備援 (5 RPM / 250K TPM)
+    "gemini-2.5-flash",      # 推薦主力：辨識精準度最高
+    "gemini-2.5-flash-lite", # 省額度首選：速度快、每日額度高
+    "gemini-2.0-flash",      # 穩定備援版
+    "gemini-2.0-flash-lite"  # 輕量備援版
 ]
 
 st.set_page_config(page_title="考卷排版神器 Pro", page_icon="📄", layout="wide")
@@ -685,7 +683,7 @@ def log_usage_to_gsheet(webhook_url, filename, pages_count, model_id, tokens):
         pass
 
 def call_api_with_retry(parts, model_id, api_key):
-    models_to_try = [model_id] + [m for m in ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"] if m != model_id]
+    models_to_try = [model_id] + [m for m in ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"] if m != model_id]
     
     for mid in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{mid}:generateContent?key={api_key}"
@@ -745,51 +743,34 @@ st.markdown(f"""
     color: {text_primary} !important;
 }}
 header[data-testid="stHeader"] {{
-    height: 1.4rem !important;
+    height: 1.2rem !important;
     background: transparent !important;
 }}
 .block-container {{
-    padding-top: 1.1rem !important;
-    padding-bottom: 1.1rem !important;
-    max-width: 1280px !important;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    max-width: 1260px !important;
 }}
 
-/* 所有帶邊框的卡片容器統一圓角、背景與邊框，並用 flexbox 讓左右兩張卡片自然等高切齊 */
-div[data-testid="stHorizontalBlock"] {{
-    align-items: stretch !important;
-}}
-div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {{
-    display: flex !important;
-    flex-direction: column !important;
-}}
-div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {{
-    flex: 1 1 auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-}}
-div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {{
-    flex: 1 1 auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-}}
+/* 所有帶邊框的卡片容器統一圓角、背景與邊框，且外層卡片一律隱藏滾軸 */
 [data-testid="stVerticalBlockBorderWrapper"] > div {{
-    flex: 1 1 auto !important;
     background-color: {bg_card} !important;
     border: 1px solid {border_col} !important;
     border-radius: 16px !important;
-    padding: 1.15rem 1.3rem !important;
+    padding: 1.1rem 1.3rem !important;
     box-shadow: 0 2px 10px rgba(44, 37, 32, 0.04) !important;
     box-sizing: border-box !important;
+    overflow: hidden !important;
 }}
 
 /* 內層卡片（最新產出框）樣式 */
 [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] > div {{
-    padding: 0.7rem 0.95rem !important;
+    padding: 0.65rem 0.9rem !important;
     border-radius: 12px !important;
     box-shadow: none !important;
 }}
 
-/* 只有歷史轉檔紀錄滾動容器（height=135）才允許出現滾軸 */
+/* 只有無邊框的「歷史轉檔紀錄」滾動容器才顯示垂直滾軸 */
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div[style*="overflow"]):not(:has(> div[style*="border"])) > div {{
     background-color: transparent !important;
     border: none !important;
@@ -805,7 +786,7 @@ div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-te
     color: {text_primary} !important;
 }}
 [data-testid="stCheckbox"] {{
-    margin-bottom: 0.1rem !important;
+    margin-bottom: 0.05rem !important;
 }}
 
 /* 檔案拖曳上傳區 */
@@ -813,8 +794,8 @@ div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-te
     background-color: {bg_sub} !important;
     border: 1.5px dashed {border_dashed} !important;
     border-radius: 12px !important;
-    min-height: 156px !important;
-    padding: 0.9rem !important;
+    min-height: 150px !important;
+    padding: 0.85rem !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -844,27 +825,9 @@ div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-te
     letter-spacing: 0.3px;
 }}
 
-/* 徹底消除 Streamlit 並排欄位中不同元件的預設上下位移差 */
-div[data-testid="stHorizontalBlock"] div[data-testid="stElementContainer"] {{
-    margin: 0 !important;
-    padding: 0 !important;
-}}
-div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"],
-div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"] p {{
-    margin: 0 !important;
-    padding: 0 !important;
-}}
-
-/* 下拉選單與輸入框統一 40px 高度，與左右標籤完全同一水平線 */
-div[data-testid="stSelectbox"] {{
-    margin: 0 !important;
-    padding: 0 !important;
-}}
+/* 下拉選單：保留 BaseWeb 原生 flex 結構，只設定外觀顏色與圓角，避免下拉選單異常 */
 div[data-testid="stSelectbox"] > label {{
     display: none !important;
-}}
-div[data-baseweb="select"] {{
-    margin: 0 !important;
 }}
 div[data-baseweb="select"] > div {{
     background-color: {bg_card} !important;
@@ -872,35 +835,21 @@ div[data-baseweb="select"] > div {{
     border-radius: 10px !important;
     color: {text_primary} !important;
     min-height: 40px !important;
-    height: 40px !important;
-    display: flex !important;
-    align-items: center !important;
 }}
 
-div[data-testid="stTextInput"] {{
-    margin: 0 !important;
-    padding: 0 !important;
-}}
+/* 輸入框圓角質感 */
 div[data-testid="stTextInput"] > label {{
     display: none !important;
 }}
-div[data-testid="stTextInput"] div[data-baseweb="base-input"],
 div[data-testid="stTextInput"] div[data-baseweb="input"] {{
     background-color: {bg_sub} !important;
     border-color: {border_col} !important;
     border-radius: 10px !important;
     height: 40px !important;
-    min-height: 40px !important;
-    display: flex !important;
-    align-items: center !important;
 }}
 div[data-testid="stTextInput"] input {{
     color: {text_primary} !important;
     font-size: 0.9rem !important;
-    height: 38px !important;
-    line-height: 38px !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
 }}
 
 /* 按鈕樣式：主按鈕棕褐色、次按鈕柔和灰棕 */
@@ -966,13 +915,13 @@ gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 # ==========================================
 # 🔝 頂部導覽列：左側 AI 模型｜中央標題｜右側對稱留白
 # ==========================================
-top_l, top_c, top_r = st.columns([1.2, 2, 1.2], vertical_alignment="center")
+top_l, top_c, top_r = st.columns([1.25, 2, 1.25], vertical_alignment="center")
 
 with top_l:
-    m_lbl, m_sel = st.columns([0.48, 1.52], vertical_alignment="center")
+    m_lbl, m_sel = st.columns([0.45, 1.55], vertical_alignment="center")
     with m_lbl:
         st.markdown(
-            f"<div style='height:40px; line-height:40px; font-size:0.9rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
+            f"<div style='font-size:0.92rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
             unsafe_allow_html=True
         )
     with m_sel:
@@ -981,11 +930,11 @@ with top_l:
 with top_c:
     st.markdown(
         f"""
-        <div style="height:40px; display:flex; align-items:center; justify-content:center; gap:12px;">
+        <div style="display:flex; align-items:center; justify-content:center; gap:12px;">
             <div style="width:40px; height:40px; background:{accent_brown}; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#FFFFFF; font-size:1.2rem; box-shadow:0 2px 6px rgba(130,84,47,0.25);">
                 📄
             </div>
-            <span style="font-size:1.65rem; font-weight:800; color:{text_primary}; letter-spacing:0.5px; line-height:1;">考卷排版神器 Pro</span>
+            <span style="font-size:1.65rem; font-weight:800; color:{text_primary}; letter-spacing:0.5px;">考卷排版神器 Pro</span>
         </div>
         """,
         unsafe_allow_html=True
@@ -994,17 +943,17 @@ with top_c:
 with top_r:
     st.empty()
 
-st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
 
 # ==========================================
-# 🧩 第一列（上方左右兩張卡片）：透過 Flexbox stretch 自動等高切齊
+# 🧩 第一列（上方左右兩張卡片）：使用原生 height=330 + overflow:hidden 確保四邊完全切齊且無外框滾軸
 # ==========================================
 row1_left, row1_right = st.columns([1, 1], gap="large")
 
 with row1_left:
-    with st.container(border=True):
+    with st.container(height=330, border=True):
         st.markdown(
-            f"<div style='margin-bottom:0.65rem;'>"
+            f"<div style='margin-bottom:0.55rem;'>"
             f"<span style='color:{accent_brown}; font-weight:700; font-size:0.98rem;'>01 / </span>"
             f"<span style='color:{text_primary}; font-weight:700; font-size:0.98rem;'>上傳與設定</span>"
             f"</div>",
@@ -1013,7 +962,7 @@ with row1_left:
 
         uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
 
-        st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
 
         chk_r1_c1, chk_r1_c2 = st.columns([1.05, 0.95])
         with chk_r1_c1:
@@ -1028,9 +977,9 @@ with row1_left:
             extract_answers = st.checkbox("文末附帶解答 (辨識考卷答案)", value=False)
 
 with row1_right:
-    with st.container(border=True):
+    with st.container(height=330, border=True):
         st.markdown(
-            f"<div style='margin-bottom:0.65rem;'>"
+            f"<div style='margin-bottom:0.55rem;'>"
             f"<span style='color:{accent_brown}; font-weight:700; font-size:0.98rem;'>02 / </span>"
             f"<span style='color:{text_primary}; font-weight:700; font-size:0.98rem;'>轉檔結果</span>"
             f"</div>",
@@ -1064,13 +1013,13 @@ with row1_right:
                     )
         else:
             st.markdown(
-                f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:12px; padding:0.95rem; text-align:center; color:{text_muted}; font-size:0.9rem;'>"
+                f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:12px; padding:0.9rem; text-align:center; color:{text_muted}; font-size:0.9rem;'>"
                 f"尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。"
                 f"</div>",
                 unsafe_allow_html=True
             )
 
-        st.markdown("<div style='height: 0.55rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
 
         # 歷史轉檔紀錄標題列
         hist_count = len(st.session_state["history"])
@@ -1084,7 +1033,7 @@ with row1_right:
         with st.container(height=135, border=False):
             if hist_count == 0:
                 st.markdown(
-                    f"<div style='background:{bg_sub}; border-radius:10px; padding:1.25rem; text-align:center; color:{text_muted}; font-size:0.84rem;'>"
+                    f"<div style='background:{bg_sub}; border-radius:10px; padding:1.2rem; text-align:center; color:{text_muted}; font-size:0.84rem;'>"
                     f"目前尚無歷史轉檔紀錄"
                     f"</div>",
                     unsafe_allow_html=True
@@ -1112,12 +1061,12 @@ with row1_right:
                         )
 
 # ==========================================
-# 🧩 第二列（下方左右兩張卡片）：透過 Flexbox stretch 自動等高切齊
+# 🧩 第二列（下方左右兩張卡片）：使用原生 height=150 確保左右兩張卡片完全切齊
 # ==========================================
 row2_left, row2_right = st.columns([1, 1], gap="large")
 
 with row2_left:
-    with st.container(border=True):
+    with st.container(height=150, border=True):
         total_pages = 0
         pdf_bytes = None
         if uploaded_file is not None:
@@ -1129,7 +1078,7 @@ with row2_left:
         pg_c1, pg_c2, pg_c3 = st.columns([0.85, 2.3, 0.85], vertical_alignment="center")
         with pg_c1:
             st.markdown(
-                f"<div style='height:40px; line-height:40px; font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 ｜</div>",
+                f"<div style='font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 ｜</div>",
                 unsafe_allow_html=True
             )
         with pg_c2:
@@ -1141,7 +1090,7 @@ with row2_left:
                 unsafe_allow_html=True
             )
 
-        st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
 
         act_c1, act_c2 = st.columns([2.6, 1], vertical_alignment="center")
         with act_c1:
@@ -1151,7 +1100,7 @@ with row2_left:
                 st.session_state["stop_requested"] = True
 
 with row2_right:
-    with st.container(border=True):
+    with st.container(height=150, border=True):
         global_stats = get_global_usage(gsheet_url) if gsheet_url else None
         if global_stats is not None:
             disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
@@ -1178,7 +1127,7 @@ with row2_right:
 
         st.markdown(
             f"""
-            <div style="width:100%; height:8px; background:{bg_sub}; border-radius:999px; overflow:hidden; margin: 10px 0 12px 0;">
+            <div style="width:100%; height:8px; background:{bg_sub}; border-radius:999px; overflow:hidden; margin: 9px 0 11px 0;">
                 <div style="width:{pct_width}; height:100%; background:{accent_brown}; border-radius:999px; transition: width 0.3s ease;"></div>
             </div>
             """,
