@@ -754,8 +754,26 @@ header[data-testid="stHeader"] {{
     max-width: 1280px !important;
 }}
 
-/* 所有帶邊框的卡片容器統一圓角、背景與邊框 */
+/* 所有帶邊框的卡片容器統一圓角、背景與邊框，並用 flexbox 讓左右兩張卡片自然等高切齊 */
+div[data-testid="stHorizontalBlock"] {{
+    align-items: stretch !important;
+}}
+div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {{
+    display: flex !important;
+    flex-direction: column !important;
+}}
+div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {{
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+}}
+div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {{
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+}}
 [data-testid="stVerticalBlockBorderWrapper"] > div {{
+    flex: 1 1 auto !important;
     background-color: {bg_card} !important;
     border: 1px solid {border_col} !important;
     border-radius: 16px !important;
@@ -771,7 +789,7 @@ header[data-testid="stHeader"] {{
     box-shadow: none !important;
 }}
 
-/* 只有歷史轉檔紀錄滾動容器（height=145）才允許出現滾軸，其餘外層卡片一律不顯示滾軸 */
+/* 只有歷史轉檔紀錄滾動容器（height=135）才允許出現滾軸 */
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div[style*="overflow"]):not(:has(> div[style*="border"])) > div {{
     background-color: transparent !important;
     border: none !important;
@@ -790,7 +808,7 @@ header[data-testid="stHeader"] {{
     margin-bottom: 0.1rem !important;
 }}
 
-/* 檔案拖曳上傳區：高度緊湊適中，確保上方卡片不溢出、不產生滾軸 */
+/* 檔案拖曳上傳區 */
 [data-testid="stFileUploaderDropzone"] {{
     background-color: {bg_sub} !important;
     border: 1.5px dashed {border_dashed} !important;
@@ -826,12 +844,27 @@ header[data-testid="stHeader"] {{
     letter-spacing: 0.3px;
 }}
 
-/* 下拉選單與輸入框圓角質感，移除上方預設留白讓垂直置中精準對齊 */
+/* 徹底消除 Streamlit 並排欄位中不同元件的預設上下位移差 */
+div[data-testid="stHorizontalBlock"] div[data-testid="stElementContainer"] {{
+    margin: 0 !important;
+    padding: 0 !important;
+}}
+div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"],
+div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"] p {{
+    margin: 0 !important;
+    padding: 0 !important;
+}}
+
+/* 下拉選單與輸入框統一 40px 高度，與左右標籤完全同一水平線 */
 div[data-testid="stSelectbox"] {{
     margin: 0 !important;
+    padding: 0 !important;
 }}
 div[data-testid="stSelectbox"] > label {{
     display: none !important;
+}}
+div[data-baseweb="select"] {{
+    margin: 0 !important;
 }}
 div[data-baseweb="select"] > div {{
     background-color: {bg_card} !important;
@@ -840,24 +873,34 @@ div[data-baseweb="select"] > div {{
     color: {text_primary} !important;
     min-height: 40px !important;
     height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
 }}
+
 div[data-testid="stTextInput"] {{
     margin: 0 !important;
+    padding: 0 !important;
 }}
 div[data-testid="stTextInput"] > label {{
     display: none !important;
 }}
+div[data-testid="stTextInput"] div[data-baseweb="base-input"],
 div[data-testid="stTextInput"] div[data-baseweb="input"] {{
     background-color: {bg_sub} !important;
     border-color: {border_col} !important;
     border-radius: 10px !important;
     height: 40px !important;
     min-height: 40px !important;
+    display: flex !important;
+    align-items: center !important;
 }}
 div[data-testid="stTextInput"] input {{
     color: {text_primary} !important;
     font-size: 0.9rem !important;
     height: 38px !important;
+    line-height: 38px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
 }}
 
 /* 按鈕樣式：主按鈕棕褐色、次按鈕柔和灰棕 */
@@ -921,15 +964,15 @@ if app_password:
 gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 
 # ==========================================
-# 🔝 頂部導覽列：左側 AI 模型（同一水平線精準置中對齊）｜中央標題｜右側對稱留白
+# 🔝 頂部導覽列：左側 AI 模型｜中央標題｜右側對稱留白
 # ==========================================
 top_l, top_c, top_r = st.columns([1.2, 2, 1.2], vertical_alignment="center")
 
 with top_l:
-    m_lbl, m_sel = st.columns([0.5, 1.5], vertical_alignment="center")
+    m_lbl, m_sel = st.columns([0.48, 1.52], vertical_alignment="center")
     with m_lbl:
         st.markdown(
-            f"<div style='height:40px; display:flex; align-items:center; font-size:0.9rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
+            f"<div style='height:40px; line-height:40px; font-size:0.9rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
             unsafe_allow_html=True
         )
     with m_sel:
@@ -938,11 +981,11 @@ with top_l:
 with top_c:
     st.markdown(
         f"""
-        <div style="display:flex; align-items:center; justify-content:center; gap:12px;">
+        <div style="height:40px; display:flex; align-items:center; justify-content:center; gap:12px;">
             <div style="width:40px; height:40px; background:{accent_brown}; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#FFFFFF; font-size:1.2rem; box-shadow:0 2px 6px rgba(130,84,47,0.25);">
                 📄
             </div>
-            <span style="font-size:1.65rem; font-weight:800; color:{text_primary}; letter-spacing:0.5px;">考卷排版神器 Pro</span>
+            <span style="font-size:1.65rem; font-weight:800; color:{text_primary}; letter-spacing:0.5px; line-height:1;">考卷排版神器 Pro</span>
         </div>
         """,
         unsafe_allow_html=True
@@ -954,7 +997,7 @@ with top_r:
 st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
 
 # ==========================================
-# 🧩 第一列（上方左右兩張卡片）：不加固定高度避免出現外框滾軸，改由內部元素高度自然切齊
+# 🧩 第一列（上方左右兩張卡片）：透過 Flexbox stretch 自動等高切齊
 # ==========================================
 row1_left, row1_right = st.columns([1, 1], gap="large")
 
@@ -1069,7 +1112,7 @@ with row1_right:
                         )
 
 # ==========================================
-# 🧩 第二列（下方左右兩張卡片）：同一水平線起點＋內部元素精準垂直置中
+# 🧩 第二列（下方左右兩張卡片）：透過 Flexbox stretch 自動等高切齊
 # ==========================================
 row2_left, row2_right = st.columns([1, 1], gap="large")
 
@@ -1083,10 +1126,10 @@ with row2_left:
             total_pages = len(doc_preview)
             doc_preview.close()
 
-        pg_c1, pg_c2, pg_c3 = st.columns([0.9, 2.25, 0.85], vertical_alignment="center")
+        pg_c1, pg_c2, pg_c3 = st.columns([0.85, 2.3, 0.85], vertical_alignment="center")
         with pg_c1:
             st.markdown(
-                f"<div style='height:40px; display:flex; align-items:center; font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 ｜</div>",
+                f"<div style='height:40px; line-height:40px; font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 ｜</div>",
                 unsafe_allow_html=True
             )
         with pg_c2:
@@ -1094,7 +1137,7 @@ with row2_left:
         with pg_c3:
             page_badge_txt = f"共 {total_pages} 頁" if total_pages > 0 else "尚未載入"
             st.markdown(
-                f"<div style='height:40px; display:flex; align-items:center; justify-content:center; background:{badge_bg}; color:{badge_text}; font-size:0.82rem; font-weight:600; padding:0 10px; border-radius:10px; white-space:nowrap;'>{page_badge_txt}</div>",
+                f"<div style='height:40px; line-height:40px; background:{badge_bg}; color:{badge_text}; font-size:0.82rem; font-weight:600; padding:0 10px; border-radius:10px; text-align:center; white-space:nowrap;'>{page_badge_txt}</div>",
                 unsafe_allow_html=True
             )
 
@@ -1133,7 +1176,6 @@ with row2_right:
         with u_m2:
             st.markdown(f"<div style='text-align:right; font-size:0.85rem; color:{text_muted}; margin-top:2px;'>累計用量：<strong style='color:{text_primary};'>{disp_tokens:,} Tokens</strong></div>", unsafe_allow_html=True)
 
-        # 使用純 HTML 渲染暖棕色圓角進度條，避免 Streamlit 預設藍色與溢出問題
         st.markdown(
             f"""
             <div style="width:100%; height:8px; background:{bg_sub}; border-radius:999px; overflow:hidden; margin: 10px 0 12px 0;">
