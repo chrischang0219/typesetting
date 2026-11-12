@@ -724,7 +724,6 @@ if "history" not in st.session_state:
 if "stop_requested" not in st.session_state:
     st.session_state["stop_requested"] = False
 
-# 從 pro_ui.html 移植的米色與棕色混搭設計變數
 BG_PAGE = "#F4F1EA"
 BG_CARD = "#FAF8F5"
 BG_SUBCARD = "#F3EFE8"
@@ -738,8 +737,6 @@ TEXT_MUTED = "#9E9388"
 ACCENT_PRIMARY = "#8C5E3C"
 ACCENT_HOVER = "#754D30"
 ACCENT_SOFT = "rgba(140, 94, 60, 0.11)"
-BETA_BG = "#F3E3D6"
-BETA_TEXT = "#9E542B"
 
 st.markdown(f"""
 <style>
@@ -751,24 +748,42 @@ html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
     color: {TEXT_PRIMARY} !important;
 }}
 header[data-testid="stHeader"] {{
-    height: 1.2rem !important;
+    height: 1rem !important;
     background: transparent !important;
 }}
 .block-container {{
-    padding-top: 1.1rem !important;
-    padding-bottom: 1.1rem !important;
+    padding-top: 1.2rem !important;
+    padding-bottom: 1.2rem !important;
     max-width: 1240px !important;
 }}
 
-/* 四張主卡片：統一圓角、米白底色與細緻陰影 */
+/* 讓並排欄位（Row 1 與 Row 2）的左右卡片自動等高拉伸切齊，且絕不出現外層滾動條 */
+div[data-testid="stHorizontalBlock"] {{
+    align-items: stretch !important;
+}}
+div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {{
+    display: flex !important;
+    flex-direction: column !important;
+}}
+div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] {{
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+}}
+div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlockBorderWrapper"] {{
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+}}
 [data-testid="stVerticalBlockBorderWrapper"] > div {{
+    flex: 1 1 auto !important;
     background-color: {BG_CARD} !important;
     border: 1px solid {BORDER_MAIN} !important;
     border-radius: 16px !important;
-    padding: 1.15rem 1.25rem !important;
+    padding: 1.25rem 1.35rem !important;
     box-shadow: 0 2px 10px rgba(59, 50, 44, 0.04) !important;
     box-sizing: border-box !important;
-    overflow: hidden !important;
+    overflow: visible !important;
 }}
 
 /* 內層高亮卡片（最新產出框） */
@@ -776,7 +791,7 @@ header[data-testid="stHeader"] {{
     background-color: {BG_SUBCARD} !important;
     border: 1px solid {ACCENT_PRIMARY} !important;
     border-radius: 12px !important;
-    padding: 0.7rem 0.9rem !important;
+    padding: 0.75rem 0.95rem !important;
     box-shadow: none !important;
 }}
 
@@ -789,9 +804,9 @@ header[data-testid="stHeader"] {{
     overflow-y: auto !important;
 }}
 
-/* 核取方塊樣式（單行不折行、自訂棕色勾選） */
+/* 核取方塊：單行不折行 */
 [data-testid="stCheckbox"] {{
-    margin-bottom: 0.1rem !important;
+    margin-bottom: 0.15rem !important;
 }}
 [data-testid="stCheckbox"] label p {{
     white-space: nowrap !important;
@@ -804,7 +819,7 @@ header[data-testid="stHeader"] {{
     background-color: {BG_SUBCARD} !important;
     border: 1.5px dashed {BORDER_MAIN} !important;
     border-radius: 12px !important;
-    min-height: 158px !important;
+    min-height: 155px !important;
     padding: 1rem !important;
     display: flex !important;
     align-items: center !important;
@@ -839,7 +854,7 @@ header[data-testid="stHeader"] {{
     color: {TEXT_PRIMARY};
 }}
 
-/* 頂部 AI 模型下拉選單 */
+/* 頂部 AI 模型下拉選單：完整圓角、清晰外框與文字置中 */
 div[data-testid="stSelectbox"] > label {{
     display: none !important;
 }}
@@ -850,26 +865,38 @@ div[data-baseweb="select"] > div {{
     color: {TEXT_PRIMARY} !important;
     min-height: 38px !important;
     height: 38px !important;
-    font-size: 0.82rem !important;
+    font-size: 0.84rem !important;
     font-weight: 600 !important;
+    box-shadow: 0 1px 2px rgba(59, 50, 44, 0.04) !important;
     cursor: pointer !important;
+}}
+div[data-baseweb="select"] > div:hover {{
+    border-color: {ACCENT_PRIMARY} !important;
 }}
 div[data-baseweb="select"] input {{
     caret-color: transparent !important;
     cursor: pointer !important;
 }}
 
-/* 頁數範圍一體化群組（左側標籤＋右側輸入框無縫接合） */
+/* 頁數範圍一體化群組（左側標籤＋右側輸入框無縫接合，同一條圓角框） */
 div[data-testid="stHorizontalBlock"]:has(.pg-addon-left) {{
     gap: 0 !important;
+    background-color: {BG_SUBCARD} !important;
+    border: 1px solid {BORDER_MAIN} !important;
+    border-radius: 12px !important;
+    padding: 0 !important;
+    align-items: center !important;
+}}
+div[data-testid="stHorizontalBlock"]:has(.pg-addon-left) > div[data-testid="stColumn"] {{
+    justify-content: center !important;
 }}
 div[data-testid="stTextInput"] > label {{
     display: none !important;
 }}
 div[data-testid="stHorizontalBlock"]:has(.pg-addon-left) div[data-testid="stTextInput"] div[data-baseweb="input"] {{
-    background-color: {BG_SUBCARD} !important;
-    border: 1px solid {BORDER_MAIN} !important;
-    border-left: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
     border-radius: 0 12px 12px 0 !important;
     height: 38px !important;
     min-height: 38px !important;
@@ -962,7 +989,7 @@ with top_l:
     m_lbl, m_sel = st.columns([0.45, 1.55], gap="small", vertical_alignment="center")
     with m_lbl:
         st.markdown(
-            f"<div style='height:38px; display:flex; align-items:center; padding-bottom:10px; font-size:0.82rem; font-weight:600; color:{TEXT_SECONDARY}; white-space:nowrap;'>AI 模型</div>",
+            f"<div style='font-size:0.84rem; font-weight:600; color:{TEXT_SECONDARY}; white-space:nowrap; margin-top:-6px;'>AI 模型</div>",
             unsafe_allow_html=True
         )
     with m_sel:
@@ -986,17 +1013,17 @@ with top_c:
 with top_r:
     st.empty()
 
-st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
 
 # ==========================================
-# 🧩 Row 1：01 / 上傳與設定 ＆ 02 / 轉檔結果（等高 332px 切齊）
+# 🧩 Row 1：01 / 上傳與設定 ＆ 02 / 轉檔結果（自然等高切齊，無外框滾動條）
 # ==========================================
 row1_left, row1_right = st.columns([1, 1], gap="medium")
 
 with row1_left:
-    with st.container(height=332, border=True):
+    with st.container(border=True):
         st.markdown(
-            f"<div style='margin-bottom:0.65rem; font-size:0.9rem; font-weight:700; color:{TEXT_PRIMARY};'>"
+            f"<div style='margin-bottom:0.75rem; font-size:0.9rem; font-weight:700; color:{TEXT_PRIMARY};'>"
             f"<span style='color:{ACCENT_PRIMARY};'>01 / </span>上傳與設定"
             f"</div>",
             unsafe_allow_html=True
@@ -1004,7 +1031,7 @@ with row1_left:
 
         uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
 
-        st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.55rem;'></div>", unsafe_allow_html=True)
 
         chk_r1_c1, chk_r1_c2 = st.columns([1.08, 0.92])
         with chk_r1_c1:
@@ -1019,9 +1046,9 @@ with row1_left:
             extract_answers = st.checkbox("文末附帶解答 (辨識考卷答案)", value=False)
 
 with row1_right:
-    with st.container(height=332, border=True):
+    with st.container(border=True):
         st.markdown(
-            f"<div style='margin-bottom:0.65rem; font-size:0.9rem; font-weight:700; color:{TEXT_PRIMARY};'>"
+            f"<div style='margin-bottom:0.75rem; font-size:0.9rem; font-weight:700; color:{TEXT_PRIMARY};'>"
             f"<span style='color:{ACCENT_PRIMARY};'>02 / </span>轉檔結果"
             f"</div>",
             unsafe_allow_html=True
@@ -1056,13 +1083,13 @@ with row1_right:
                     )
         else:
             st.markdown(
-                f"<div style='background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-radius:12px; padding:0.9rem; text-align:center; color:{TEXT_SECONDARY}; font-size:0.84rem;'>"
+                f"<div style='background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-radius:12px; padding:0.95rem; text-align:center; color:{TEXT_SECONDARY}; font-size:0.84rem;'>"
                 f"尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。"
                 f"</div>",
                 unsafe_allow_html=True
             )
 
-        st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
 
         # 歷史轉檔紀錄（僅此區塊有滾動卷軸）
         hist_count = len(st.session_state["history"])
@@ -1072,10 +1099,10 @@ with row1_right:
         with hh2:
             st.markdown(f"<div style='text-align:right; font-size:0.75rem; color:{TEXT_MUTED};'>僅保留本次工作階段</div>", unsafe_allow_html=True)
 
-        with st.container(height=134, border=False):
+        with st.container(height=135, border=False):
             if hist_count == 0:
                 st.markdown(
-                    f"<div style='background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-radius:12px; padding:1.15rem; text-align:center; color:{TEXT_MUTED}; font-size:0.8rem;'>"
+                    f"<div style='background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-radius:12px; padding:1.25rem; text-align:center; color:{TEXT_MUTED}; font-size:0.8rem;'>"
                     f"目前尚無歷史轉檔紀錄"
                     f"</div>",
                     unsafe_allow_html=True
@@ -1102,13 +1129,15 @@ with row1_right:
                             use_container_width=True
                         )
 
+st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
+
 # ==========================================
-# 🧩 Row 2：頁數範圍與操作按鈕 ＆ 今日額度與用量監控（等高 162px 切齊）
+# 🧩 Row 2：頁數範圍與操作按鈕 ＆ 今日額度與用量監控（自然等高切齊，進度條完整呈現）
 # ==========================================
 row2_left, row2_right = st.columns([1, 1], gap="medium")
 
 with row2_left:
-    with st.container(height=162, border=True):
+    with st.container(border=True):
         total_pages = 0
         pdf_bytes = None
         if uploaded_file is not None:
@@ -1121,11 +1150,13 @@ with row2_left:
         with pg_c1:
             pg_label_txt = f"頁數範圍 ({total_pages}頁)" if total_pages > 0 else "頁數範圍"
             st.markdown(
-                f"<div class='pg-addon-left' style='height:38px; display:flex; align-items:center; justify-content:center; background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-right:1px solid {BORDER_MAIN}; border-radius:12px 0 0 12px; font-size:0.8rem; font-weight:700; color:{TEXT_SECONDARY}; white-space:nowrap; padding:0 12px; margin-bottom:10px;'>{pg_label_txt}</div>",
+                f"<div class='pg-addon-left' style='height:38px; display:flex; align-items:center; justify-content:center; border-right:1px solid {BORDER_MAIN}; font-size:0.8rem; font-weight:700; color:{TEXT_SECONDARY}; white-space:nowrap; padding:0 12px; margin-top:-6px;'>{pg_label_txt}</div>",
                 unsafe_allow_html=True
             )
         with pg_c2:
             page_input = st.text_input("頁數範圍", value="", placeholder="例：1-3（留空則預設轉換全部）", label_visibility="collapsed")
+
+        st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
 
         act_c1, act_c2 = st.columns([2.5, 1], gap="small", vertical_alignment="center")
         with act_c1:
@@ -1134,25 +1165,27 @@ with row2_left:
             if st.button("⏹ 停止生成", type="secondary", use_container_width=True):
                 st.session_state["stop_requested"] = True
 
+        st.markdown("<div style='height: 0.55rem;'></div>", unsafe_allow_html=True)
+
         status_placeholder = st.empty()
         progress_placeholder = st.empty()
         if "last_status_msg" not in st.session_state:
             st.session_state["last_status_msg"] = ("待命中，請上傳 PDF 考卷開始解析", 0)
         msg_txt, msg_pct = st.session_state["last_status_msg"]
         status_placeholder.markdown(
-            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY}; margin-top:4px;'>"
+            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY};'>"
             f"<span style='white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{msg_txt}</span>"
             f"<span style='font-weight:600; color:{ACCENT_PRIMARY};'>{msg_pct}%</span></div>",
             unsafe_allow_html=True
         )
         progress_placeholder.markdown(
-            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:4px;'>"
+            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:5px;'>"
             f"<div style='width:{msg_pct}%; height:100%; background:{ACCENT_PRIMARY}; border-radius:999px; transition:width 0.3s ease;'></div></div>",
             unsafe_allow_html=True
         )
 
 with row2_right:
-    with st.container(height=162, border=True):
+    with st.container(border=True):
         global_stats = get_global_usage(gsheet_url) if gsheet_url else None
         if global_stats is not None:
             disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
@@ -1171,15 +1204,17 @@ with row2_right:
         with u_h2:
             st.markdown(f"<div style='text-align:right; font-size:0.8rem; font-weight:600; color:{ACCENT_PRIMARY};'>今日額度：{usage_ratio*100:.2f}%</div>", unsafe_allow_html=True)
 
+        st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
+
         u_m1, u_m2 = st.columns(2, vertical_alignment="center")
         with u_m1:
-            st.markdown(f"<div style='font-size:0.8rem; color:{TEXT_SECONDARY}; margin-top:4px;'>當日轉檔次數：<strong style='color:{TEXT_PRIMARY};'>{disp_count} 次</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:0.8rem; color:{TEXT_SECONDARY};'>當日轉檔次數：<strong style='color:{TEXT_PRIMARY};'>{disp_count} 次</strong></div>", unsafe_allow_html=True)
         with u_m2:
-            st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:{TEXT_SECONDARY}; margin-top:4px;'>累計用量：<strong style='color:{TEXT_PRIMARY};'>{disp_tokens:,} Tokens</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:{TEXT_SECONDARY};'>累計用量：<strong style='color:{TEXT_PRIMARY};'>{disp_tokens:,} Tokens</strong></div>", unsafe_allow_html=True)
 
         st.markdown(
             f"""
-            <div style="width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin: 10px 0 13px 0;">
+            <div style="width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin: 10px 0 14px 0;">
                 <div style="width:{pct_width}; height:100%; background:{ACCENT_PRIMARY}; border-radius:999px; transition: width 0.3s ease;"></div>
             </div>
             """,
@@ -1260,12 +1295,12 @@ if start_btn and uploaded_file is not None and pdf_bytes is not None:
         pct = int(((b_idx + 0.5) / total_steps) * 100)
         cur_msg = f"⏳ 正在解析... {b_idx + 1}/{total_steps} 題目文字與版面辨識..."
         status_placeholder.markdown(
-            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY}; margin-top:4px;'>"
+            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY};'>"
             f"<span>{cur_msg}</span><span style='font-weight:600; color:{ACCENT_PRIMARY};'>{pct}%</span></div>",
             unsafe_allow_html=True
         )
         progress_placeholder.markdown(
-            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:4px;'>"
+            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:5px;'>"
             f"<div style='width:{pct}%; height:100%; background:{ACCENT_PRIMARY}; border-radius:999px;'></div></div>",
             unsafe_allow_html=True
         )
@@ -1311,12 +1346,12 @@ if start_btn and uploaded_file is not None and pdf_bytes is not None:
         pct = int(((len(batches) + 0.5) / total_steps) * 100)
         cur_msg = f"⏳ 正在解析... {total_steps}/{total_steps} 辨識考卷參考解答..."
         status_placeholder.markdown(
-            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY}; margin-top:4px;'>"
+            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY};'>"
             f"<span>{cur_msg}</span><span style='font-weight:600; color:{ACCENT_PRIMARY};'>{pct}%</span></div>",
             unsafe_allow_html=True
         )
         progress_placeholder.markdown(
-            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:4px;'>"
+            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:5px;'>"
             f"<div style='width:{pct}%; height:100%; background:{ACCENT_PRIMARY}; border-radius:999px;'></div></div>",
             unsafe_allow_html=True
         )
