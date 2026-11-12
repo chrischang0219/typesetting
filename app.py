@@ -765,22 +765,11 @@ header[data-testid="stHeader"] {{
     overflow: hidden !important;
 }}
 
-/* 內層卡片（最新產出框與頁數範圍整合列）樣式 */
+/* 內層卡片（最新產出框）樣式 */
 [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] > div {{
-    padding: 0.45rem 0.85rem !important;
-    border-radius: 11px !important;
+    padding: 0.65rem 0.9rem !important;
+    border-radius: 12px !important;
     box-shadow: none !important;
-}}
-/* 讓頁數範圍整合列內的輸入框融入同一條色塊，不產生雙層外框 */
-[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] div[data-baseweb="input"] {{
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    height: 34px !important;
-}}
-[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] input {{
-    background-color: transparent !important;
-    padding-left: 0 !important;
 }}
 
 /* 只有無邊框的「歷史轉檔紀錄」滾動容器才顯示垂直滾軸 */
@@ -909,11 +898,16 @@ if app_password:
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
     if not st.session_state["authenticated"]:
-        _, login_col, _ = st.columns([1, 1.3, 1])
+        _, login_col, _ = st.columns([0.8, 1.8, 0.8])
         with login_col:
             with st.container(border=True):
                 st.markdown(f"<div style='text-align:center; font-size:1.25rem; font-weight:700; margin-bottom:0.6rem; color:{text_primary};'>📄 考卷排版神器 Pro</div>", unsafe_allow_html=True)
-                st.info("🔒 此工具已設定存取密碼，請輸入密碼後繼續使用。")
+                st.markdown(
+                    f"<div style='background:{bg_sub}; border:1px solid {border_col}; color:{text_primary}; border-radius:10px; padding:10px 14px; text-align:center; font-size:0.92rem; font-weight:500; white-space:nowrap; margin-bottom:0.65rem;'>"
+                    f"🔒 此工具已設定存取密碼，請輸入密碼後繼續使用。"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
                 pwd_input = st.text_input("請輸入通行密碼", type="password", placeholder="請輸入通行密碼", label_visibility="collapsed")
                 if st.button("🔓 登入", type="primary", use_container_width=True):
                     if pwd_input == app_password:
@@ -1079,7 +1073,7 @@ with row1_right:
 row2_left, row2_right = st.columns([1, 1], gap="large")
 
 with row2_left:
-    with st.container(height=150, border=True):
+    with st.container(height=142, border=True):
         total_pages = 0
         pdf_bytes = None
         if uploaded_file is not None:
@@ -1088,21 +1082,15 @@ with row2_left:
             total_pages = len(doc_preview)
             doc_preview.close()
 
-        with st.container(border=True):
-            pg_c1, pg_c2, pg_c3 = st.columns([0.9, 2.35, 0.75], vertical_alignment="center")
-            with pg_c1:
-                st.markdown(
-                    f"<div style='height:34px; display:flex; align-items:center; transform:translateY(-2px); font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 &nbsp;<span style='opacity:0.45;'>|</span></div>",
-                    unsafe_allow_html=True
-                )
-            with pg_c2:
-                page_input = st.text_input("頁數範圍", value="", placeholder="例：1-3（留空則預設轉換全部）", label_visibility="collapsed")
-            with pg_c3:
-                page_badge_txt = f"共 {total_pages} 頁" if total_pages > 0 else "尚未載入"
-                st.markdown(
-                    f"<div style='height:30px; display:flex; align-items:center; justify-content:center; transform:translateY(-2px); background:{bg_card}; border:1px solid {border_col}; color:{text_muted}; font-size:0.8rem; font-weight:600; padding:0 8px; border-radius:7px; white-space:nowrap;'>{page_badge_txt}</div>",
-                    unsafe_allow_html=True
-                )
+        pg_c1, pg_c2 = st.columns([1.05, 2.55], gap="small", vertical_alignment="center")
+        with pg_c1:
+            pg_label_txt = f"頁數範圍 (共{total_pages}頁)" if total_pages > 0 else "頁數範圍"
+            st.markdown(
+                f"<div style='height:40px; display:flex; align-items:center; justify-content:center; background:{bg_sub}; border:1px solid {border_col}; border-radius:10px; font-size:0.86rem; font-weight:600; color:{text_primary}; white-space:nowrap; padding:0 10px;'>{pg_label_txt}</div>",
+                unsafe_allow_html=True
+            )
+        with pg_c2:
+            page_input = st.text_input("頁數範圍", value="", placeholder="例：1-3（留空則預設轉換全部）", label_visibility="collapsed")
 
         st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
 
@@ -1114,7 +1102,7 @@ with row2_left:
                 st.session_state["stop_requested"] = True
 
 with row2_right:
-    with st.container(height=150, border=True):
+    with st.container(height=142, border=True):
         global_stats = get_global_usage(gsheet_url) if gsheet_url else None
         if global_stats is not None:
             disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
