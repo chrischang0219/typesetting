@@ -754,31 +754,56 @@ header[data-testid="stHeader"] {{
     max-width: 1280px !important;
 }}
 
-/* 卡片容器設計：統一圓角、邊框與內距 */
+/* 四張主卡片容器設計：統一圓角、邊框、內距與外距，並使用固定高度讓上下左右四區塊完全齊平 */
 [data-testid="stVerticalBlockBorderWrapper"] > div {{
     background-color: {bg_card} !important;
     border: 1px solid {border_col} !important;
     border-radius: 16px !important;
     padding: 1.2rem 1.35rem !important;
     box-shadow: 0 2px 10px rgba(44, 37, 32, 0.04) !important;
+    box-sizing: border-box !important;
 }}
 
-/* 核取方塊文字樣式 */
+/* 頂部兩張主卡片（01 上傳與設定、02 轉檔結果）強制等高 350px */
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"] > div > div > div[data-testid="stVerticalBlockBorderWrapper"]) > div[data-testid="stColumn"] > div > div > div[data-testid="stVerticalBlockBorderWrapper"]:first-of-type > div {{
+    height: 350px !important;
+    min-height: 350px !important;
+    max-height: 350px !important;
+}}
+
+/* 底部兩張主卡片（頁數範圍控制列、今日額度與用量監控）強制等高 148px */
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"] > div > div > div[data-testid="stVerticalBlockBorderWrapper"]) > div[data-testid="stColumn"] > div > div > div[data-testid="stVerticalBlockBorderWrapper"]:last-of-type > div {{
+    height: 148px !important;
+    min-height: 148px !important;
+    max-height: 148px !important;
+}}
+
+/* 內層的「最新產出」框與「歷史轉檔滾動區」不受外層固定高度影響 */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] > div {{
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0.75rem 1rem !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+}}
+
+/* 核取方塊文字樣式：不截斷、不出現省略號 */
 [data-testid="stCheckbox"] label p {{
     white-space: nowrap !important;
-    font-size: 0.92rem !important;
+    font-size: 0.9rem !important;
     color: {text_primary} !important;
 }}
 [data-testid="stCheckbox"] {{
     margin-bottom: 0.1rem !important;
 }}
 
-/* 檔案拖曳上傳區：調整高度讓左右上方卡片等高對齊 */
+/* 檔案拖曳上傳區 */
 [data-testid="stFileUploaderDropzone"] {{
     background-color: {bg_sub} !important;
     border: 1.5px dashed {border_dashed} !important;
     border-radius: 12px !important;
-    min-height: 186px !important;
+    min-height: 175px !important;
     padding: 1rem !important;
     display: flex !important;
     align-items: center !important;
@@ -858,10 +883,18 @@ button[kind="secondary"]:hover {{
     border-color: {accent_brown} !important;
 }}
 
-/* 進度條暖棕色（相容新版 Streamlit） */
+/* 強制將所有進度條（包含額度監控條）覆寫為暖棕色，徹底覆蓋 Streamlit 預設藍色 */
+[data-testid="stProgress"] div[role="progressbar"],
 [data-testid="stProgress"] div[role="progressbar"] > div,
-[data-testid="stProgress"] > div > div > div > div {{
+[data-testid="stProgress"] > div > div > div,
+[data-testid="stProgress"] > div > div > div > div,
+.stProgress > div > div > div > div {{
     background-color: {accent_brown} !important;
+}}
+[data-testid="stProgress"] > div > div {{
+    background-color: {bg_sub} !important;
+    border-radius: 999px !important;
+    height: 8px !important;
 }}
 
 /* 固定高度可滾動的歷史紀錄區（st.container(height=...)） */
@@ -870,6 +903,9 @@ button[kind="secondary"]:hover {{
     border: none !important;
     box-shadow: none !important;
     padding: 0 4px 0 0 !important;
+    height: 155px !important;
+    min-height: 155px !important;
+    max-height: 155px !important;
 }}
 /* 歷史紀錄列內的下載按鈕對齊卡片高度 */
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div[style*="overflow"]) button[kind="secondary"] {{
@@ -937,7 +973,7 @@ with top_r:
 st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
 
 # ==========================================
-# 🧩 主版面：左右等寬雙欄結構，上下卡片切齊對齊
+# 🧩 主版面：左右等寬雙欄結構，上下四張卡片完全對齊
 # ==========================================
 col_left, col_right = st.columns([1, 1], gap="large")
 
@@ -956,13 +992,13 @@ with col_left:
 
         st.markdown("<div style='height: 0.55rem;'></div>", unsafe_allow_html=True)
 
-        chk_r1_c1, chk_r1_c2 = st.columns([1.15, 0.85])
+        chk_r1_c1, chk_r1_c2 = st.columns([1.05, 0.95])
         with chk_r1_c1:
             is_english_mode = st.checkbox("英文考卷模式 (Times New Roman)", value=False)
         with chk_r1_c2:
             enable_image_crop = st.checkbox("自動裁切圖片 (Beta)", value=False)
 
-        chk_r2_c1, chk_r2_c2 = st.columns([1.15, 0.85])
+        chk_r2_c1, chk_r2_c2 = st.columns([1.05, 0.95])
         with chk_r2_c1:
             enable_omml_math = st.checkbox("數學方程式轉換 (Beta)", value=False)
         with chk_r2_c2:
@@ -1185,28 +1221,17 @@ with col_left:
                 st.error("❌ 轉換失敗或已中止，請更換模型或稍後重試。")
 
 with col_right:
-    # 上右卡片 02：轉檔結果（含固定高度可滾動的歷史轉檔紀錄）
+    # 上右卡片 02：轉檔結果（移除右上角「最新產出」標籤，固定高度與左側切齊）
     with st.container(border=True):
-        res_h1, res_h2 = st.columns([2, 1], vertical_alignment="center")
-        with res_h1:
-            st.markdown(
-                f"<div>"
-                f"<span style='color:{accent_brown}; font-weight:700; font-size:0.98rem;'>02 / </span>"
-                f"<span style='color:{text_primary}; font-weight:700; font-size:0.98rem;'>轉檔結果</span>"
-                f"</div>",
-                unsafe_allow_html=True
-            )
-        with res_h2:
-            st.markdown(
-                f"<div style='text-align:right;'>"
-                f"<span style='background:{badge_bg}; color:{badge_text}; font-size:0.78rem; font-weight:600; padding:4px 10px; border-radius:12px;'>最新產出</span>"
-                f"</div>",
-                unsafe_allow_html=True
-            )
+        st.markdown(
+            f"<div style='margin-bottom:0.75rem;'>"
+            f"<span style='color:{accent_brown}; font-weight:700; font-size:0.98rem;'>02 / </span>"
+            f"<span style='color:{text_primary}; font-weight:700; font-size:0.98rem;'>轉檔結果</span>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
 
-        st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
-
-        # 最新產出精選框（若 docx_time/docx_model 為空則自動從第一筆歷史紀錄補齊）
+        # 最新產出精選框
         if "docx_bytes" in st.session_state:
             lat_time = st.session_state.get("docx_time") or (st.session_state["history"][0]["time"] if st.session_state["history"] else "")
             lat_model = st.session_state.get("docx_model") or (st.session_state["history"][0].get("model", "") if st.session_state["history"] else "")
@@ -1233,7 +1258,7 @@ with col_right:
                     )
         else:
             st.markdown(
-                f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:12px; padding:1.15rem; text-align:center; color:{text_muted}; font-size:0.9rem;'>"
+                f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:12px; padding:1.05rem; text-align:center; color:{text_muted}; font-size:0.9rem;'>"
                 f"尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。"
                 f"</div>",
                 unsafe_allow_html=True
@@ -1249,11 +1274,11 @@ with col_right:
         with hh2:
             st.markdown(f"<div style='text-align:right; font-size:0.78rem; color:{text_muted};'>僅保留本次工作階段</div>", unsafe_allow_html=True)
 
-        # 固定高度滾動區（height=138），讓上下左右卡片底部切齊對齊
-        with st.container(height=138, border=False):
+        # 固定高度滾動區（height=155），讓上下左右卡片底部切齊對齊
+        with st.container(height=155, border=False):
             if hist_count == 0:
                 st.markdown(
-                    f"<div style='background:{bg_sub}; border-radius:10px; padding:1.2rem; text-align:center; color:{text_muted}; font-size:0.84rem;'>"
+                    f"<div style='background:{bg_sub}; border-radius:10px; padding:1.35rem; text-align:center; color:{text_muted}; font-size:0.84rem;'>"
                     f"目前尚無歷史轉檔紀錄"
                     f"</div>",
                     unsafe_allow_html=True
@@ -1280,7 +1305,7 @@ with col_right:
                             use_container_width=True
                         )
 
-    # 下右卡片：今日額度與用量監控
+    # 下右卡片：今日額度與用量監控（固定高度 148px 與下左卡片完全切齊）
     with st.container(border=True):
         global_stats = get_global_usage(gsheet_url) if gsheet_url else None
         if global_stats is not None:
