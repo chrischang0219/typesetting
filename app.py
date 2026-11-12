@@ -690,7 +690,7 @@ def call_api_with_retry(parts, model_id, api_key):
                     data = res.json()
                     text_out = data['candidates'][0]['content']['parts'][0]['text']
                     usage = data.get('usageMetadata', {})
-                    return text_out, usage
+                    return text_out, usage, mid
                 elif res.status_code == 429:
                     time.sleep(20)
                 elif res.status_code == 503:
@@ -699,7 +699,7 @@ def call_api_with_retry(parts, model_id, api_key):
                     break
             except Exception:
                 break
-    return None, {}
+    return None, {}, None
 
 # ==========================================
 # 🎨 網頁介面 (Streamlit)
@@ -957,6 +957,7 @@ with col_left:
                     merged_answers = []
                     final_header = "考卷排版結果"
                     total_used_tokens = 0
+                    used_models = []
                     all_ok = True
 
                     for b_idx, batch in enumerate(batches):
@@ -975,10 +976,12 @@ with col_left:
                             b64 = base64.b64encode(jpg_bytes).decode('utf-8')
                             parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
 
-                        txt_b, usage_b = call_api_with_retry(parts, selected_model, api_key)
+                        txt_b, usage_b, actual_mid_b = call_api_with_retry(parts, selected_model, api_key)
                         if not txt_b:
                             all_ok = False
                             break
+                        if actual_mid_b and actual_mid_b not in used_models:
+                            used_models.append(actual_mid_b)
                         total_used_tokens += usage_b.get("totalTokenCount", 0)
                         if b_idx == 0:
                             hm = re.search(r"HEADER:\s*(.*)", txt_b)
@@ -1006,8 +1009,10 @@ with col_left:
                             pix = doc[idx].get_pixmap(dpi=250)
                             b64 = base64.b64encode(pix.tobytes("jpeg")).decode('utf-8')
                             ans_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
-                        ans_out, ans_usage = call_api_with_retry(ans_parts, selected_model, api_key)
+                        ans_out, ans_usage, actual_mid_ans = call_api_with_retry(ans_parts, selected_model, api_key)
                         if ans_out and ans_out.strip():
+                            if actual_mid_ans and actual_mid_ans not in used_models:
+                                used_models.append(actual_mid_ans)
                             total_used_tokens += ans_usage.get("totalTokenCount", 0)
                             merged_answers = [ans_out.strip()]
 
@@ -1018,8 +1023,9 @@ with col_left:
                         used_tokens = total_used_tokens
                         st.session_state["request_count"] += 1
                         st.session_state["total_tokens"] += used_tokens
+                        actual_model_str = ", ".join(used_models) if used_models else selected_model
                         if gsheet_url:
-                            log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), selected_model, used_tokens)
+                            log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), actual_model_str, used_tokens)
                         base_name = os.path.splitext(uploaded_file.name)[0]
                         answers_txt = "\n".join(merged_answers) if (extract_answers and merged_answers) else None
                         docx_bytes = create_word_document(txt, is_english_mode, extracted_pics=all_extracted_pics if enable_image_crop else None, answers_text=answers_txt, ans_title=base_name)
@@ -1030,12 +1036,12 @@ with col_left:
                             "name": out_name,
                             "data": docx_bytes,
                             "time": datetime.now(timezone(timedelta(hours=8))).strftime("%H:%M:%S"),
-                            "model": selected_model,
+                            "model": actual_model_str,
                             "pages": len(indices)
                         })
                         st.session_state["history"] = st.session_state["history"][:10]
 
-                        st.success("🎉 全部排版完成！請點擊右側按鈕下載")
+                        st.success(f"🎉 全部排版完成（實際使用模型：`{actual_model_str}`）！請點擊右側按鈕下載")
                     else:
                         st.error("❌ 轉換失敗，請更換模型或稍後重試。")
 
@@ -1063,7 +1069,7 @@ with col_right:
                     c1.markdown(
                         f"<div style='display:flex; flex-direction:column; justify-content:center; min-height:38px;'>"
                         f"<div style='font-weight:600; word-break:break-all; line-height:1.25;'>{item['name']}</div>"
-                        f"<div style='font-size:0.78rem; opacity:0.7; margin-top:2px;'>🕒 {item['time']}</div>"
+                        f"<div style='font-size:0.78rem; opacity:0.7; margin-top:2px;'>🕒 {item['time']} ｜ 🧠 {item.get('model', '')}</div>"
                         f"</div>",
                         unsafe_allow_html=True
                     )
