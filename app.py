@@ -759,7 +759,7 @@ header[data-testid="stHeader"] {{
     background-color: {bg_card} !important;
     border: 1px solid {border_col} !important;
     border-radius: 16px !important;
-    padding: 1.1rem 1.3rem !important;
+    padding: 1.15rem 1.3rem !important;
     box-shadow: 0 2px 10px rgba(44, 37, 32, 0.04) !important;
     box-sizing: border-box !important;
 }}
@@ -771,12 +771,13 @@ header[data-testid="stHeader"] {{
     box-shadow: none !important;
 }}
 
-/* 無邊框的滾動容器（歷史轉檔紀錄） */
+/* 只有歷史轉檔紀錄滾動容器（height=145）才允許出現滾軸，其餘外層卡片一律不顯示滾軸 */
 [data-testid="stVerticalBlockBorderWrapper"]:has(> div[style*="overflow"]):not(:has(> div[style*="border"])) > div {{
     background-color: transparent !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 4px 0 0 !important;
+    overflow-y: auto !important;
 }}
 
 /* 核取方塊文字樣式 */
@@ -789,13 +790,13 @@ header[data-testid="stHeader"] {{
     margin-bottom: 0.1rem !important;
 }}
 
-/* 檔案拖曳上傳區 */
+/* 檔案拖曳上傳區：高度緊湊適中，確保上方卡片不溢出、不產生滾軸 */
 [data-testid="stFileUploaderDropzone"] {{
     background-color: {bg_sub} !important;
     border: 1.5px dashed {border_dashed} !important;
     border-radius: 12px !important;
-    min-height: 175px !important;
-    padding: 1rem !important;
+    min-height: 156px !important;
+    padding: 0.9rem !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -825,12 +826,20 @@ header[data-testid="stHeader"] {{
     letter-spacing: 0.3px;
 }}
 
-/* 下拉選單與輸入框圓角質感 */
+/* 下拉選單與輸入框圓角質感，移除上方預設留白讓垂直置中精準對齊 */
+div[data-testid="stSelectbox"] {{
+    margin: 0 !important;
+}}
+div[data-testid="stSelectbox"] > label {{
+    display: none !important;
+}}
 div[data-baseweb="select"] > div {{
     background-color: {bg_card} !important;
     border-color: {border_col} !important;
     border-radius: 10px !important;
     color: {text_primary} !important;
+    min-height: 40px !important;
+    height: 40px !important;
 }}
 div[data-testid="stTextInput"] {{
     margin: 0 !important;
@@ -843,10 +852,12 @@ div[data-testid="stTextInput"] div[data-baseweb="input"] {{
     border-color: {border_col} !important;
     border-radius: 10px !important;
     height: 40px !important;
+    min-height: 40px !important;
 }}
 div[data-testid="stTextInput"] input {{
     color: {text_primary} !important;
     font-size: 0.9rem !important;
+    height: 38px !important;
 }}
 
 /* 按鈕樣式：主按鈕棕褐色、次按鈕柔和灰棕 */
@@ -872,20 +883,6 @@ button[kind="secondary"] {{
 }}
 button[kind="secondary"]:hover {{
     border-color: {accent_brown} !important;
-}}
-
-/* 進度條暖棕色 */
-[data-testid="stProgress"] div[role="progressbar"],
-[data-testid="stProgress"] div[role="progressbar"] > div,
-[data-testid="stProgress"] > div > div > div,
-[data-testid="stProgress"] > div > div > div > div,
-.stProgress > div > div > div > div {{
-    background-color: {accent_brown} !important;
-}}
-[data-testid="stProgress"] > div > div {{
-    background-color: {bg_sub} !important;
-    border-radius: 999px !important;
-    height: 8px !important;
 }}
 
 /* 歷史紀錄列內的下載按鈕對齊卡片高度 */
@@ -924,14 +921,17 @@ if app_password:
 gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 
 # ==========================================
-# 🔝 頂部導覽列：左側 AI 模型｜中央標題｜右側對稱留白
+# 🔝 頂部導覽列：左側 AI 模型（同一水平線精準置中對齊）｜中央標題｜右側對稱留白
 # ==========================================
 top_l, top_c, top_r = st.columns([1.2, 2, 1.2], vertical_alignment="center")
 
 with top_l:
-    m_lbl, m_sel = st.columns([0.45, 1.55], vertical_alignment="center")
+    m_lbl, m_sel = st.columns([0.5, 1.5], vertical_alignment="center")
     with m_lbl:
-        st.markdown(f"<div style='font-size:0.9rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='height:40px; display:flex; align-items:center; font-size:0.9rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
+            unsafe_allow_html=True
+        )
     with m_sel:
         selected_model = st.selectbox("AI 模型", VALID_MODELS, index=0, label_visibility="collapsed")
 
@@ -954,12 +954,12 @@ with top_r:
 st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
 
 # ==========================================
-# 🧩 第一列（上方左右兩張卡片）：使用相同 height=345 確保上下完全齊平
+# 🧩 第一列（上方左右兩張卡片）：不加固定高度避免出現外框滾軸，改由內部元素高度自然切齊
 # ==========================================
 row1_left, row1_right = st.columns([1, 1], gap="large")
 
 with row1_left:
-    with st.container(height=345, border=True):
+    with st.container(border=True):
         st.markdown(
             f"<div style='margin-bottom:0.65rem;'>"
             f"<span style='color:{accent_brown}; font-weight:700; font-size:0.98rem;'>01 / </span>"
@@ -985,7 +985,7 @@ with row1_left:
             extract_answers = st.checkbox("文末附帶解答 (辨識考卷答案)", value=False)
 
 with row1_right:
-    with st.container(height=345, border=True):
+    with st.container(border=True):
         st.markdown(
             f"<div style='margin-bottom:0.65rem;'>"
             f"<span style='color:{accent_brown}; font-weight:700; font-size:0.98rem;'>02 / </span>"
@@ -1021,13 +1021,13 @@ with row1_right:
                     )
         else:
             st.markdown(
-                f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:12px; padding:1.05rem; text-align:center; color:{text_muted}; font-size:0.9rem;'>"
+                f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:12px; padding:0.95rem; text-align:center; color:{text_muted}; font-size:0.9rem;'>"
                 f"尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。"
                 f"</div>",
                 unsafe_allow_html=True
             )
 
-        st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.55rem;'></div>", unsafe_allow_html=True)
 
         # 歷史轉檔紀錄標題列
         hist_count = len(st.session_state["history"])
@@ -1037,11 +1037,11 @@ with row1_right:
         with hh2:
             st.markdown(f"<div style='text-align:right; font-size:0.78rem; color:{text_muted};'>僅保留本次工作階段</div>", unsafe_allow_html=True)
 
-        # 固定高度滾動區（height=145）
-        with st.container(height=145, border=False):
+        # 只有「歷史轉檔紀錄」此區域有固定高度與滾軸（height=135）
+        with st.container(height=135, border=False):
             if hist_count == 0:
                 st.markdown(
-                    f"<div style='background:{bg_sub}; border-radius:10px; padding:1.3rem; text-align:center; color:{text_muted}; font-size:0.84rem;'>"
+                    f"<div style='background:{bg_sub}; border-radius:10px; padding:1.25rem; text-align:center; color:{text_muted}; font-size:0.84rem;'>"
                     f"目前尚無歷史轉檔紀錄"
                     f"</div>",
                     unsafe_allow_html=True
@@ -1069,12 +1069,12 @@ with row1_right:
                         )
 
 # ==========================================
-# 🧩 第二列（下方左右兩張卡片）：使用相同 height=155 確保上下完全齊平
+# 🧩 第二列（下方左右兩張卡片）：同一水平線起點＋內部元素精準垂直置中
 # ==========================================
 row2_left, row2_right = st.columns([1, 1], gap="large")
 
 with row2_left:
-    with st.container(height=155, border=True):
+    with st.container(border=True):
         total_pages = 0
         pdf_bytes = None
         if uploaded_file is not None:
@@ -1083,19 +1083,22 @@ with row2_left:
             total_pages = len(doc_preview)
             doc_preview.close()
 
-        pg_c1, pg_c2, pg_c3 = st.columns([0.85, 2.35, 0.8], vertical_alignment="center")
+        pg_c1, pg_c2, pg_c3 = st.columns([0.9, 2.25, 0.85], vertical_alignment="center")
         with pg_c1:
-            st.markdown(f"<div style='font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 ｜</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='height:40px; display:flex; align-items:center; font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 ｜</div>",
+                unsafe_allow_html=True
+            )
         with pg_c2:
             page_input = st.text_input("頁數範圍", value="", placeholder="例：1-3（留空則預設轉換全部）", label_visibility="collapsed")
         with pg_c3:
             page_badge_txt = f"共 {total_pages} 頁" if total_pages > 0 else "尚未載入"
             st.markdown(
-                f"<div style='background:{badge_bg}; color:{badge_text}; font-size:0.82rem; font-weight:600; padding:7px 10px; border-radius:8px; text-align:center; white-space:nowrap;'>{page_badge_txt}</div>",
+                f"<div style='height:40px; display:flex; align-items:center; justify-content:center; background:{badge_bg}; color:{badge_text}; font-size:0.82rem; font-weight:600; padding:0 10px; border-radius:10px; white-space:nowrap;'>{page_badge_txt}</div>",
                 unsafe_allow_html=True
             )
 
-        st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
 
         act_c1, act_c2 = st.columns([2.6, 1], vertical_alignment="center")
         with act_c1:
@@ -1105,7 +1108,7 @@ with row2_left:
                 st.session_state["stop_requested"] = True
 
 with row2_right:
-    with st.container(height=155, border=True):
+    with st.container(border=True):
         global_stats = get_global_usage(gsheet_url) if gsheet_url else None
         if global_stats is not None:
             disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
@@ -1116,6 +1119,7 @@ with row2_right:
 
         ref_limit = 200_000
         usage_ratio = min(disp_tokens / ref_limit, 1.0)
+        pct_width = f"{usage_ratio * 100:.2f}%"
 
         u_h1, u_h2 = st.columns([1.6, 1], vertical_alignment="center")
         with u_h1:
@@ -1125,14 +1129,22 @@ with row2_right:
 
         u_m1, u_m2 = st.columns(2, vertical_alignment="center")
         with u_m1:
-            st.markdown(f"<div style='font-size:0.85rem; color:{text_muted};'>當日轉檔次數：<strong style='color:{text_primary};'>{disp_count} 次</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:0.85rem; color:{text_muted}; margin-top:2px;'>當日轉檔次數：<strong style='color:{text_primary};'>{disp_count} 次</strong></div>", unsafe_allow_html=True)
         with u_m2:
-            st.markdown(f"<div style='text-align:right; font-size:0.85rem; color:{text_muted};'>累計用量：<strong style='color:{text_primary};'>{disp_tokens:,} Tokens</strong></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align:right; font-size:0.85rem; color:{text_muted}; margin-top:2px;'>累計用量：<strong style='color:{text_primary};'>{disp_tokens:,} Tokens</strong></div>", unsafe_allow_html=True)
 
-        st.progress(usage_ratio)
+        # 使用純 HTML 渲染暖棕色圓角進度條，避免 Streamlit 預設藍色與溢出問題
+        st.markdown(
+            f"""
+            <div style="width:100%; height:8px; background:{bg_sub}; border-radius:999px; overflow:hidden; margin: 10px 0 12px 0;">
+                <div style="width:{pct_width}; height:100%; background:{accent_brown}; border-radius:999px; transition: width 0.3s ease;"></div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
 
-# 進度條與狀態提示區（執行解析時才顯示在底部，平時不佔用卡片高度）
+# 進度條與狀態提示區（執行解析時才顯示在底部）
 status_placeholder = st.empty()
 progress_placeholder = st.empty()
 
