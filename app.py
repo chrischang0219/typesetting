@@ -827,16 +827,32 @@ header[data-testid="stHeader"] {{
     letter-spacing: 0.3px;
 }}
 
-/* 下拉選單：保留 BaseWeb 原生 flex 結構，只設定外觀顏色與圓角，避免下拉選單異常 */
+/* 下拉選單：外觀圓角、垂直置中並隱藏輸入游標 */
 div[data-testid="stSelectbox"] > label {{
     display: none !important;
 }}
 div[data-baseweb="select"] > div {{
     background-color: {bg_card} !important;
-    border-color: {border_col} !important;
+    border: 1px solid {border_col} !important;
     border-radius: 10px !important;
     color: {text_primary} !important;
     min-height: 40px !important;
+    height: 40px !important;
+    cursor: pointer !important;
+}}
+div[data-baseweb="select"] input {{
+    caret-color: transparent !important;
+    cursor: pointer !important;
+}}
+
+/* 頁數範圍一體化群組（左側標籤＋右側輸入框無縫接合） */
+div[data-testid="stHorizontalBlock"]:has(.pg-addon-left) {{
+    gap: 0 !important;
+}}
+div[data-testid="stHorizontalBlock"]:has(.pg-addon-left) div[data-testid="stTextInput"] div[data-baseweb="input"] {{
+    border-radius: 0 10px 10px 0 !important;
+    border-left: none !important;
+    background-color: {bg_sub} !important;
 }}
 
 /* 輸入框圓角質感 */
@@ -925,10 +941,10 @@ gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 top_l, top_c, top_r = st.columns([1.25, 2, 1.25], vertical_alignment="center")
 
 with top_l:
-    m_lbl, m_sel = st.columns([0.45, 1.55], vertical_alignment="center")
+    m_lbl, m_sel = st.columns([0.48, 1.52], gap="small", vertical_alignment="center")
     with m_lbl:
         st.markdown(
-            f"<div style='height:40px; display:flex; align-items:center; transform:translateY(-3px); font-size:0.92rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
+            f"<div style='height:40px; display:flex; align-items:center; justify-content:flex-start; padding-bottom:10px; font-size:0.92rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
             unsafe_allow_html=True
         )
     with m_sel:
@@ -1082,15 +1098,17 @@ with row2_left:
             total_pages = len(doc_preview)
             doc_preview.close()
 
-        pg_c1, pg_c2 = st.columns([1.05, 2.55], gap="small", vertical_alignment="center")
+        st.markdown('<div class="page-range-group">', unsafe_allow_html=True)
+        pg_c1, pg_c2 = st.columns([0.92, 2.68], gap="small", vertical_alignment="center")
         with pg_c1:
-            pg_label_txt = f"頁數範圍 (共{total_pages}頁)" if total_pages > 0 else "頁數範圍"
+            pg_label_txt = f"頁數範圍 ({total_pages}頁)" if total_pages > 0 else "頁數範圍"
             st.markdown(
-                f"<div style='height:40px; display:flex; align-items:center; justify-content:center; background:{bg_sub}; border:1px solid {border_col}; border-radius:10px; font-size:0.86rem; font-weight:600; color:{text_primary}; white-space:nowrap; padding:0 10px;'>{pg_label_txt}</div>",
+                f"<div class='pg-addon-left' style='height:40px; display:flex; align-items:center; justify-content:center; background:{bg_sub}; border:1px solid {border_col}; border-right:1px solid {border_col}; border-radius:10px 0 0 10px; font-size:0.88rem; font-weight:600; color:{text_primary}; white-space:nowrap; padding:0 12px; margin-bottom:10px;'>{pg_label_txt}</div>",
                 unsafe_allow_html=True
             )
         with pg_c2:
             page_input = st.text_input("頁數範圍", value="", placeholder="例：1-3（留空則預設轉換全部）", label_visibility="collapsed")
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
 
