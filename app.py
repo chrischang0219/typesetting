@@ -39,10 +39,12 @@ DOC_TITLE_FONT = "王漢宗顏楷體繁"
 DOC_CHINESE_FONT = "標楷體"
 DOC_ENGLISH_FONT = "Times New Roman"
 VALID_MODELS = [
-    "gemini-2.5-flash",      # 推薦主力：辨識精準度最高
-    "gemini-2.5-flash-lite", # 省額度首選：速度快、每日額度高
-    "gemini-2.0-flash",      # 穩定備援版
-    "gemini-2.0-flash-lite"  # 輕量備援版
+    "gemini-3.8-flash",      # 推薦：最新主力，辨識精準度高 (5 RPM / 250K TPM)
+    "gemini-3.6-flash",      # 備用主力：同等級高精準度 (5 RPM / 250K TPM)
+    "gemini-3.5-flash-lite", # 省額度首選：速度極快、每分鐘上限高 (15 RPM / 250K TPM)
+    "gemini-3.1-flash-lite", # 輕量備援：同樣享有高每分鐘次數 (15 RPM / 250K TPM)
+    "gemini-2.5-flash-lite", # 穩定輕量版 (10 RPM / 250K TPM)
+    "gemini-2.5-flash"       # 舊版備援 (5 RPM / 250K TPM)
 ]
 
 st.set_page_config(page_title="考卷排版神器 Pro", page_icon="📄", layout="wide")
@@ -683,7 +685,7 @@ def log_usage_to_gsheet(webhook_url, filename, pages_count, model_id, tokens):
         pass
 
 def call_api_with_retry(parts, model_id, api_key):
-    models_to_try = [model_id] + [m for m in ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.0-flash-lite"] if m != model_id]
+    models_to_try = [model_id] + [m for m in ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"] if m != model_id]
     
     for mid in models_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{mid}:generateContent?key={api_key}"
@@ -763,11 +765,22 @@ header[data-testid="stHeader"] {{
     overflow: hidden !important;
 }}
 
-/* 內層卡片（最新產出框）樣式 */
+/* 內層卡片（最新產出框與頁數範圍整合列）樣式 */
 [data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] > div {{
-    padding: 0.65rem 0.9rem !important;
-    border-radius: 12px !important;
+    padding: 0.45rem 0.85rem !important;
+    border-radius: 11px !important;
     box-shadow: none !important;
+}}
+/* 讓頁數範圍整合列內的輸入框融入同一條色塊，不產生雙層外框 */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] div[data-baseweb="input"] {{
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    height: 34px !important;
+}}
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] input {{
+    background-color: transparent !important;
+    padding-left: 0 !important;
 }}
 
 /* 只有無邊框的「歷史轉檔紀錄」滾動容器才顯示垂直滾軸 */
@@ -921,7 +934,7 @@ with top_l:
     m_lbl, m_sel = st.columns([0.45, 1.55], vertical_alignment="center")
     with m_lbl:
         st.markdown(
-            f"<div style='font-size:0.92rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
+            f"<div style='height:40px; display:flex; align-items:center; transform:translateY(-3px); font-size:0.92rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>",
             unsafe_allow_html=True
         )
     with m_sel:
@@ -1075,20 +1088,21 @@ with row2_left:
             total_pages = len(doc_preview)
             doc_preview.close()
 
-        pg_c1, pg_c2, pg_c3 = st.columns([0.85, 2.3, 0.85], vertical_alignment="center")
-        with pg_c1:
-            st.markdown(
-                f"<div style='font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 ｜</div>",
-                unsafe_allow_html=True
-            )
-        with pg_c2:
-            page_input = st.text_input("頁數範圍", value="", placeholder="例：1-3（留空則預設轉換全部）", label_visibility="collapsed")
-        with pg_c3:
-            page_badge_txt = f"共 {total_pages} 頁" if total_pages > 0 else "尚未載入"
-            st.markdown(
-                f"<div style='height:40px; line-height:40px; background:{badge_bg}; color:{badge_text}; font-size:0.82rem; font-weight:600; padding:0 10px; border-radius:10px; text-align:center; white-space:nowrap;'>{page_badge_txt}</div>",
-                unsafe_allow_html=True
-            )
+        with st.container(border=True):
+            pg_c1, pg_c2, pg_c3 = st.columns([0.9, 2.35, 0.75], vertical_alignment="center")
+            with pg_c1:
+                st.markdown(
+                    f"<div style='height:34px; display:flex; align-items:center; transform:translateY(-2px); font-size:0.88rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>頁數範圍 &nbsp;<span style='opacity:0.45;'>|</span></div>",
+                    unsafe_allow_html=True
+                )
+            with pg_c2:
+                page_input = st.text_input("頁數範圍", value="", placeholder="例：1-3（留空則預設轉換全部）", label_visibility="collapsed")
+            with pg_c3:
+                page_badge_txt = f"共 {total_pages} 頁" if total_pages > 0 else "尚未載入"
+                st.markdown(
+                    f"<div style='height:30px; display:flex; align-items:center; justify-content:center; transform:translateY(-2px); background:{bg_card}; border:1px solid {border_col}; color:{text_muted}; font-size:0.8rem; font-weight:600; padding:0 8px; border-radius:7px; white-space:nowrap;'>{page_badge_txt}</div>",
+                    unsafe_allow_html=True
+                )
 
         st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
 
