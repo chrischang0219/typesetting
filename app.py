@@ -715,176 +715,233 @@ def call_api_with_retry(parts, model_id, api_key):
 # ==========================================
 # 🎨 網頁介面 (Streamlit)
 # ==========================================
-st.markdown("<h2 style='text-align: center; margin-top: -0.5rem; margin-bottom: 0.6rem; font-weight: 700;'>📄 考卷排版神器 Pro</h2>", unsafe_allow_html=True)
+if "total_tokens" not in st.session_state:
+    st.session_state["total_tokens"] = 0
+if "request_count" not in st.session_state:
+    st.session_state["request_count"] = 0
+if "history" not in st.session_state:
+    st.session_state["history"] = []
+if "stop_requested" not in st.session_state:
+    st.session_state["stop_requested"] = False
 
-# 自訂樣式：單一視窗免滾動緊湊排版、沉穩藍灰卡片與置中上傳區
-st.markdown("""
+# 從 pro_ui.html 移植的米色與棕色混搭設計變數
+BG_PAGE = "#F4F1EA"
+BG_CARD = "#FAF8F5"
+BG_SUBCARD = "#F3EFE8"
+BG_INPUT = "#FFFFFF"
+BG_HOVER = "#EAE3D7"
+BORDER_MAIN = "#E4DDD3"
+BORDER_SUBTLE = "#EAE3D8"
+TEXT_PRIMARY = "#3B322C"
+TEXT_SECONDARY = "#7D7268"
+TEXT_MUTED = "#9E9388"
+ACCENT_PRIMARY = "#8C5E3C"
+ACCENT_HOVER = "#754D30"
+ACCENT_SOFT = "rgba(140, 94, 60, 0.11)"
+BETA_BG = "#F3E3D6"
+BETA_TEXT = "#9E542B"
+
+st.markdown(f"""
 <style>
-/* 全域米白背景與深棕文字 */
-.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
-    background-color: #F5F1EB !important;
-    color: #2C2520 !important;
-}
-/* 縮小頁面上下留白，讓單一畫面即可完整操作 */
-.block-container {
-    padding-top: 1.5rem !important;
-    padding-bottom: 1rem !important;
-    max-width: 1280px !important;
-}
-/* 隱藏預設 header 佔位高度 */
-header[data-testid="stHeader"] {
-    height: 2.2rem !important;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
+
+html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {{
+    font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    background-color: {BG_PAGE} !important;
+    color: {TEXT_PRIMARY} !important;
+}}
+header[data-testid="stHeader"] {{
+    height: 1.2rem !important;
     background: transparent !important;
-}
-/* 卡片容器樣式：純白卡片搭配暖棕邊框 */
-[data-testid="stVerticalBlockBorderWrapper"] > div {
-    background-color: #FFFFFF !important;
-    border-color: #E2D9CE !important;
+}}
+.block-container {{
+    padding-top: 1.1rem !important;
+    padding-bottom: 1.1rem !important;
+    max-width: 1240px !important;
+}}
+
+/* 四張主卡片：統一圓角、米白底色與細緻陰影 */
+[data-testid="stVerticalBlockBorderWrapper"] > div {{
+    background-color: {BG_CARD} !important;
+    border: 1px solid {BORDER_MAIN} !important;
+    border-radius: 16px !important;
+    padding: 1.15rem 1.25rem !important;
+    box-shadow: 0 2px 10px rgba(59, 50, 44, 0.04) !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+}}
+
+/* 內層高亮卡片（最新產出框） */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stVerticalBlockBorderWrapper"] > div {{
+    background-color: {BG_SUBCARD} !important;
+    border: 1px solid {ACCENT_PRIMARY} !important;
     border-radius: 12px !important;
-    padding: 0.85rem 1rem !important;
-    box-shadow: 0 2px 8px rgba(44, 37, 32, 0.04) !important;
-}
-/* 縮小卡片標題間距與深棕字色 */
-h2, h3 {
-    color: #2C2520 !important;
-}
-h3 {
-    margin-top: 0 !important;
-    margin-bottom: 0.4rem !important;
-    font-size: 1.1rem !important;
-}
-/* 核取方塊允許換行不截斷，但單行內不自動折行 */
-[data-testid="stCheckbox"] label p {
+    padding: 0.7rem 0.9rem !important;
+    box-shadow: none !important;
+}}
+
+/* 只有無邊框的「歷史轉檔紀錄」滾動容器才顯示垂直滾軸 */
+[data-testid="stVerticalBlockBorderWrapper"]:has(> div[style*="overflow"]):not(:has(> div[style*="border"])) > div {{
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 4px 0 0 !important;
+    overflow-y: auto !important;
+}}
+
+/* 核取方塊樣式（單行不折行、自訂棕色勾選） */
+[data-testid="stCheckbox"] {{
+    margin-bottom: 0.1rem !important;
+}}
+[data-testid="stCheckbox"] label p {{
     white-space: nowrap !important;
-    line-height: 1.35 !important;
-    font-size: 0.9rem !important;
-    color: #2C2520 !important;
-}
-/* 自訂檔案上傳區：暖米色底搭配棕色虛線框 */
-[data-testid="stFileUploaderDropzone"] {
-    background-color: #F2ECE4 !important;
-    border: 1.5px dashed #B8A99A !important;
-    border-radius: 10px;
-    min-height: 115px;
-    padding: 0.8rem !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-[data-testid="stFileUploaderDropzoneInstructions"] > div > span {
-    display: none;
-}
-[data-testid="stFileUploaderDropzoneInstructions"] {
+    font-size: 0.86rem !important;
+    color: {TEXT_PRIMARY} !important;
+}}
+
+/* 拖曳上傳區 */
+[data-testid="stFileUploaderDropzone"] {{
+    background-color: {BG_SUBCARD} !important;
+    border: 1.5px dashed {BORDER_MAIN} !important;
+    border-radius: 12px !important;
+    min-height: 158px !important;
+    padding: 1rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.2s ease !important;
+}}
+[data-testid="stFileUploaderDropzone"]:hover {{
+    border-color: {ACCENT_PRIMARY} !important;
+    background-color: {ACCENT_SOFT} !important;
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] > div > span,
+[data-testid="stFileUploaderDropzoneInstructions"] > div > small,
+[data-testid="stFileUploaderDropzone"] button {{
+    display: none !important;
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] {{
     width: 100% !important;
     margin: 0 !important;
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
     text-align: center !important;
-}
-[data-testid="stFileUploaderDropzoneInstructions"] > div {
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] > div {{
     width: 100% !important;
     text-align: center !important;
-}
-[data-testid="stFileUploaderDropzoneInstructions"] > div::before {
-    content: "☁️ 拖曳 PDF 考卷檔案至此或點此上傳檔案";
-    font-size: 1rem;
-    font-weight: 500;
-    color: #2C2520 !important;
-    display: block;
-    text-align: center;
-}
-[data-testid="stFileUploaderDropzoneInstructions"] > div > small {
-    display: none;
-}
-[data-testid="stFileUploaderDropzone"] button {
-    display: none;
-}
-/* 下拉選單與輸入框暖米色系 */
-div[data-baseweb="select"] > div {
-    background-color: #F8F5F0 !important;
-    border-color: #D8CEC2 !important;
-    color: #2C2520 !important;
-}
-div[data-testid="stTextInput"] div[data-baseweb="input"] {
-    background-color: #F8F5F0 !important;
-    border-color: #D8CEC2 !important;
-    height: 42px !important;
-    min-height: 42px !important;
-    box-sizing: border-box !important;
-}
-div[data-testid="stTextInput"] input {
-    color: #2C2520 !important;
-    height: 40px !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    line-height: 40px !important;
-}
-/* 主要按鈕木質棕色 */
-button[kind="primary"] {
-    background-color: #82542F !important;
-    border-color: #82542F !important;
-    color: #FFFFFF !important;
-    font-weight: 600 !important;
-}
-button[kind="primary"]:hover {
-    background-color: #6D4525 !important;
-    border-color: #6D4525 !important;
-}
-/* 次要按鈕與連結按鈕暖米棕風格 */
-button[kind="secondary"], [data-testid="stLinkButton"] a {
-    background-color: #F8F5F0 !important;
-    border: 1px solid #D8CEC2 !important;
-    color: #2C2520 !important;
-}
-button[kind="secondary"]:hover, [data-testid="stLinkButton"] a:hover {
-    border-color: #82542F !important;
-    color: #82542F !important;
-}
-/* 額度進度條木質棕色 */
-[data-testid="stProgress"] div[role="progressbar"] > div,
-[data-testid="stProgress"] > div > div > div > div {
-    background-color: #82542F !important;
-}
-[data-testid="stProgress"] > div > div {
-    background-color: #EAE2D7 !important;
-}
-/* 強制對齊「已載入」與「選擇頁數輸入框」的高度與邊距 */
-div[data-testid="stTextInput"] {
-    margin: 0 !important;
-    padding: 0 !important;
-}
-div[data-testid="stTextInput"] > label {
+}}
+[data-testid="stFileUploaderDropzoneInstructions"] > div::before {{
+    content: "將 PDF 拖曳至此處，或 瀏覽檔案";
+    font-size: 0.94rem;
+    font-weight: 600;
+    color: {TEXT_PRIMARY};
+}}
+
+/* 頂部 AI 模型下拉選單 */
+div[data-testid="stSelectbox"] > label {{
     display: none !important;
-}
-/* 移除並排欄位內元件的預設底部間距 */
-div[data-testid="stHorizontalBlock"] div[data-testid="stElementContainer"] {
-    margin-bottom: 0 !important;
-}
-div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"],
-div[data-testid="stHorizontalBlock"] div[data-testid="stMarkdownContainer"] p {
-    margin-top: 0 !important;
-    margin-bottom: 0 !important;
-}
+}}
+div[data-baseweb="select"] > div {{
+    background-color: {BG_CARD} !important;
+    border: 1px solid {BORDER_MAIN} !important;
+    border-radius: 12px !important;
+    color: {TEXT_PRIMARY} !important;
+    min-height: 38px !important;
+    height: 38px !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+}}
+div[data-baseweb="select"] input {{
+    caret-color: transparent !important;
+    cursor: pointer !important;
+}}
+
+/* 頁數範圍一體化群組（左側標籤＋右側輸入框無縫接合） */
+div[data-testid="stHorizontalBlock"]:has(.pg-addon-left) {{
+    gap: 0 !important;
+}}
+div[data-testid="stTextInput"] > label {{
+    display: none !important;
+}}
+div[data-testid="stHorizontalBlock"]:has(.pg-addon-left) div[data-testid="stTextInput"] div[data-baseweb="input"] {{
+    background-color: {BG_SUBCARD} !important;
+    border: 1px solid {BORDER_MAIN} !important;
+    border-left: none !important;
+    border-radius: 0 12px 12px 0 !important;
+    height: 38px !important;
+    min-height: 38px !important;
+}}
+div[data-testid="stTextInput"] div[data-baseweb="input"] {{
+    background-color: {BG_INPUT} !important;
+    border: 1px solid {BORDER_MAIN} !important;
+    border-radius: 12px !important;
+    height: 40px !important;
+}}
+div[data-testid="stTextInput"] input {{
+    color: {TEXT_PRIMARY} !important;
+    font-size: 0.84rem !important;
+}}
+
+/* 主要按鈕（棕色）與次要按鈕（暖米棕外框） */
+button[kind="primary"] {{
+    background-color: {ACCENT_PRIMARY} !important;
+    border: 1px solid transparent !important;
+    border-radius: 10px !important;
+    color: #FAF8F5 !important;
+    font-weight: 600 !important;
+    font-size: 0.84rem !important;
+    height: 40px !important;
+}}
+button[kind="primary"]:hover:not(:disabled) {{
+    background-color: {ACCENT_HOVER} !important;
+}}
+button[kind="secondary"], [data-testid="stLinkButton"] a {{
+    background-color: {BG_SUBCARD} !important;
+    border: 1px solid {BORDER_MAIN} !important;
+    border-radius: 10px !important;
+    color: {TEXT_PRIMARY} !important;
+    font-weight: 600 !important;
+    font-size: 0.84rem !important;
+    height: 40px !important;
+}}
+button[kind="secondary"]:hover, [data-testid="stLinkButton"] a:hover {{
+    background-color: {BG_HOVER} !important;
+    border-color: {BORDER_MAIN} !important;
+    color: {TEXT_PRIMARY} !important;
+}}
+
+/* 歷史紀錄列內的下載小按鈕 */
+[data-testid="stVerticalBlockBorderWrapper"]:has(> div[style*="overflow"]):not(:has(> div[style*="border"])) button[kind="secondary"] {{
+    height: 46px !important;
+    min-height: 46px !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
-# 從後台 Secrets 讀取 API Key
+# 讀取 Secrets 與密碼驗證
 api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
 if not api_key:
     st.error("⚠️ 系統尚未設定 API Key，請管理員至 Streamlit Cloud 後台 Secrets 新增 `GEMINI_API_KEY`。")
     st.stop()
 
-# 通行密碼驗證（若 Secrets 有設定 APP_PASSWORD 才啟用）
 app_password = st.secrets.get("APP_PASSWORD", "").strip()
 if app_password:
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
     if not st.session_state["authenticated"]:
-        _, login_col, _ = st.columns([1, 1.4, 1])
+        _, login_col, _ = st.columns([0.8, 1.8, 0.8])
         with login_col:
             with st.container(border=True):
-                st.info("🔒 此工具已設定存取密碼，請輸入密碼後繼續使用。")
+                st.markdown(f"<div style='text-align:center; font-size:1.3rem; font-weight:700; margin-bottom:0.65rem; color:{TEXT_PRIMARY};'>📄 考卷排版神器 Pro</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; color:{TEXT_PRIMARY}; border-radius:12px; padding:10px 14px; text-align:center; font-size:0.88rem; font-weight:500; white-space:nowrap; margin-bottom:0.65rem;'>"
+                    f"🔒 此工具已設定存取密碼，請輸入密碼後繼續使用。"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
                 pwd_input = st.text_input("請輸入通行密碼", type="password", placeholder="請輸入通行密碼", label_visibility="collapsed")
                 if st.button("🔓 登入", type="primary", use_container_width=True):
                     if pwd_input == app_password:
@@ -894,248 +951,208 @@ if app_password:
                         st.error("❌ 密碼錯誤，請重新輸入。")
         st.stop()
 
-# 初始化本次連線用量統計（備援用）
-if "total_tokens" not in st.session_state:
-    st.session_state["total_tokens"] = 0
-if "request_count" not in st.session_state:
-    st.session_state["request_count"] = 0
-if "history" not in st.session_state:
-    st.session_state["history"] = []
-
 gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 
-# 主版面分為左右兩欄：左側為設定與上傳區，右側為下載與用量監控區
-col_left, col_right = st.columns([1.6, 1], gap="large")
+# ==========================================
+# 🔝 頂部三欄對稱 Header（無 Dark/Light 切換）
+# ==========================================
+top_l, top_c, top_r = st.columns([1.25, 2, 1.25], vertical_alignment="center")
 
-with col_left:
-    # 卡片 1：排版設定
-    with st.container(border=True):
-        hdr_c1, hdr_c2, hdr_c3 = st.columns([1.2, 0.7, 1.5], vertical_alignment="center")
-        with hdr_c1:
-            st.subheader("⚙️ 排版設定")
-        with hdr_c2:
-            st.markdown("<div style='text-align:right; font-size:0.92rem; font-weight:600;'>🧠 AI 模型：</div>", unsafe_allow_html=True)
-        with hdr_c3:
-            selected_model = st.selectbox("🧠 AI 模型選擇", VALID_MODELS, index=0, label_visibility="collapsed")
+with top_l:
+    m_lbl, m_sel = st.columns([0.45, 1.55], gap="small", vertical_alignment="center")
+    with m_lbl:
+        st.markdown(
+            f"<div style='height:38px; display:flex; align-items:center; padding-bottom:10px; font-size:0.82rem; font-weight:600; color:{TEXT_SECONDARY}; white-space:nowrap;'>AI 模型</div>",
+            unsafe_allow_html=True
+        )
+    with m_sel:
+        selected_model = st.selectbox("AI 模型", VALID_MODELS, index=0, label_visibility="collapsed")
 
-        opt_c1, opt_c2, opt_c3, opt_c4 = st.columns([1.28, 0.9, 1.0, 0.92], vertical_alignment="top")
-        with opt_c1:
-            is_english_mode = st.checkbox("英文考卷模式  \n(Times New Roman)", value=False)
-        with opt_c2:
-            enable_image_crop = st.checkbox("自動裁切圖片  \n(測試階段)", value=False)
-        with opt_c3:
-            enable_omml_math = st.checkbox("數學方程式轉換  \n(測試階段)", value=False)
-        with opt_c4:
-            extract_answers = st.checkbox("文末附帶解答  \n(辨識考卷答案)", value=False)
+with top_c:
+    st.markdown(
+        f"""
+        <div style="display:flex; align-items:center; justify-content:center; gap:14px;">
+            <div style="width:42px; height:42px; background:{ACCENT_PRIMARY}; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#FAF8F5; box-shadow:0 2px 6px rgba(59,50,44,0.12); flex-shrink:0;">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            </div>
+            <span style="font-size:1.72rem; font-weight:700; color:{TEXT_PRIMARY}; letter-spacing:-0.01em; white-space:nowrap;">考卷排版神器 Pro</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-    # 卡片 2：檔案上傳與解析區（所有操作集中於同一張卡片內，免滾動）
-    with st.container(border=True):
+with top_r:
+    st.empty()
+
+st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
+
+# ==========================================
+# 🧩 Row 1：01 / 上傳與設定 ＆ 02 / 轉檔結果（等高 332px 切齊）
+# ==========================================
+row1_left, row1_right = st.columns([1, 1], gap="medium")
+
+with row1_left:
+    with st.container(height=332, border=True):
+        st.markdown(
+            f"<div style='margin-bottom:0.65rem; font-size:0.9rem; font-weight:700; color:{TEXT_PRIMARY};'>"
+            f"<span style='color:{ACCENT_PRIMARY};'>01 / </span>上傳與設定"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
         uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
 
-        if uploaded_file is not None:
-            pdf_bytes = uploaded_file.getvalue()
-            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-            total_pages = len(doc)
+        st.markdown("<div style='height: 0.35rem;'></div>", unsafe_allow_html=True)
 
-            page_input = st.text_input("選擇頁數 (如 1-3，留空全轉)", value="", placeholder=f"共 {total_pages} 頁｜輸入頁數如 1-3，留空則全部轉換", label_visibility="collapsed")
+        chk_r1_c1, chk_r1_c2 = st.columns([1.08, 0.92])
+        with chk_r1_c1:
+            is_english_mode = st.checkbox("英文考卷模式 (Times New Roman)", value=False)
+        with chk_r1_c2:
+            enable_image_crop = st.checkbox("自動裁切圖片 (Beta)", value=False)
 
-            btn_c1, btn_c2 = st.columns([3, 1], vertical_alignment="center")
-            with btn_c1:
-                start_btn = st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True)
-            with btn_c2:
-                st.button("⏹️ 停止生成", use_container_width=True)
+        chk_r2_c1, chk_r2_c2 = st.columns([1.08, 0.92])
+        with chk_r2_c1:
+            enable_omml_math = st.checkbox("數學方程式轉換 (Beta)", value=False)
+        with chk_r2_c2:
+            extract_answers = st.checkbox("文末附帶解答 (辨識考卷答案)", value=False)
 
-            if start_btn:
-                indices = parse_page_selection(page_input, total_pages)
+with row1_right:
+    with st.container(height=332, border=True):
+        st.markdown(
+            f"<div style='margin-bottom:0.65rem; font-size:0.9rem; font-weight:700; color:{TEXT_PRIMARY};'>"
+            f"<span style='color:{ACCENT_PRIMARY};'>02 / </span>轉檔結果"
+            f"</div>",
+            unsafe_allow_html=True
+        )
 
-                with st.spinner("⏳ 正在處理中，請稍候..."):
-                    math_rule_txt = (
-                        "**僅在分數、根號、線段本體時使用標準 LaTeX 語法並以單一 `$` 包夾**（例如 `$\\frac{1}{2}$`、`$\\sqrt{3}$`、`$\\overline{AB}$`）。**等號、數字與其他文字絕對不要包進 `$` 裡面**（例如寫成 `$\\overline{BC}$＝1`，不可寫成 `$\\overline{BC}＝1$`）。單純的英文字母（如 `ABCD`、`x`）、數字比例（如 `5：6：3`）或一般中文敘述請維持純文字，**不要**放進 `$` 裡面。"
-                        if enable_omml_math else
-                        "**絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$`、`\\frac{1}{2}`、`\\overline{AB}`、`\\bot`），線段直接寫 `AB`、分數直接寫 `1/2`、垂直寫 `⊥`、平行寫 `//`，請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。數學算式中的 `+ - × ÷ ± < > = :` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝ ：`）。"
-                    )
-                    prompt = """
-                        請分析考卷圖片並嚴格遵守以下規則進行逐字轉錄與排版：
-                        0. **最高原則（過濾無關雜訊、手寫與精確轉錄）**：
-                           - **完全忽略所有手寫筆跡與解答詳解**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程，以及答案卷上附帶的「評分標準／參考算式／詳解」），只辨識原本的**印刷體題目**。
-                           - **完全忽略所有考試規則說明與頁首頁尾雜訊**（例如：`※試題卷共 X 頁...`、`請使用 2B 鉛筆畫在答案卡上`、`請使用黑筆在答案卷上作答`、`〔第 X 頁，共 X 頁〕`、`「試題結束」`、答案卷頂端的學校/範圍/班級座號姓名欄），這些提示字句一律不要輸出。
-                           - **答案卷／作答卷處理原則**：不需要整張轉錄答案卷！答案卷上的「選擇題／填充題填答格子表格」（用來給學生填寫答案的空白表格）**絕對不要輸出**；只有當答案卷上印有**計算題、證明題、作圖題或應用題的完整題目敘述**時，才需要把該大題標題與題目（不含解答算式）轉錄出來。
-                           - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
-                           - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
-                           - {math_rule_txt}
-                        1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
-                           - `[年份]` 必須是民國年數字（如 `115`、`114`、`113`），**絕對不可寫成縣市名稱（如新北、台北）**。
-                           - [考試名稱]後面的空格一定要加上
-                           - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
-                           - 學校只需要名稱前兩個字（如 `中和`），考試只需要標示第一次、第二次、或第三次段考試題並且要在整行標題包含後面空格加上底線，然後要靠左對齊。
-                           - 範例：`115(一)中和                  第一次段考試題                            `。
-                        2. **選擇題 / 是非題**：
-                           - 必須在題號後加上括號 `(   )`，且括號後面**不要加空格**，直接接題目文字。
-                           - 範例：`1.(   )這是題目`。
-                        3. **填充題 / 作圖題 / 計算題**：
-                           - 題號後 **不要** 加括號，直接空格接題目。
-                           - 範例：`2. 請畫出三角形` 或 `3. ＿＿＿`。
-                        4. **選項處理**：
-                           - 若選項是 1,2,3,4 或 (1)(2)(3)(4)，請轉為 ①②③④。
-                           - 若選項是 (A)(B)(C)(D)，保留原樣。
-                           - **務必將每個選項 (A)(B)(C)(D) 或 ①②③④ 放在新的一行**。
-                        5. 重要：忽略圖片、插圖，不要輸出圖片描述；但若考卷或題目附有**文字/數據表格、分數對照表或配分表**，請務必使用標準 Markdown 表格語法（`| 欄位1 | 欄位2 |`）完整輸出表格內容。
-                        6. 如果找不到標題，請把第一行文字當作標題。
-                        格式回傳（務必完整包含頭尾標記）：
-                        HEADER: [標題]
-                        CONTENT_START
-                        ...
-                        CONTENT_END
-                        """
-
-                    if enable_image_crop:
-                        prompt += """
-                        7. **配圖編號配對**：
-                           - 圖片中已經用紅框標記並寫上 `PIC:編號`（例如 `PIC:1`、`PIC:2`）。
-                           - 若某題目附有該幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[PIC: 編號]`（例如 `[PIC: 1]`）。
-                           - **若紅框內是「手寫筆跡／手寫計算過程」、「純文字」、「空白作答欄框線」或是「已經輸出為 Markdown 表格的文字/數據表格」，請絕對不要輸出 `[PIC: 編號]`**。只針對「印刷體的幾何圖形、實驗裝置圖或圖表」輸出 `[PIC: 編號]`。
-                           - 若該題沒有配圖，則不要輸出 `[PIC: ...]`。
-                    """
-
-                    prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
-
-                    # 自動每 2 頁分批送出給 AI，維持最高注意力並避免後半段空白
-                    batches = [indices[i:i + 2] for i in range(0, len(indices), 2)]
-                    all_extracted_pics = {}
-                    next_pic_id = 1
-                    merged_contents = []
-                    merged_answers = []
-                    final_header = "考卷排版結果"
-                    total_used_tokens = 0
-                    used_models = []
-                    all_ok = True
-
-                    for b_idx, batch in enumerate(batches):
-                        parts = [{"text": prompt}]
-                        for idx in batch:
-                            pix = doc[idx].get_pixmap(dpi=250)
-                            jpg_bytes = pix.tobytes("jpeg")
-                            if enable_image_crop:
-                                pil_page = Image.open(io.BytesIO(jpg_bytes)).convert("RGB")
-                                annotated_page, page_pics = extract_diagrams_from_page_cv2(pil_page, start_id=next_pic_id)
-                                next_pic_id += len(page_pics)
-                                all_extracted_pics.update(page_pics)
-                                buf = io.BytesIO()
-                                annotated_page.save(buf, format="JPEG", quality=92)
-                                jpg_bytes = buf.getvalue()
-                            b64 = base64.b64encode(jpg_bytes).decode('utf-8')
-                            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
-
-                        txt_b, usage_b, actual_mid_b = call_api_with_retry(parts, selected_model, api_key)
-                        if not txt_b:
-                            all_ok = False
-                            break
-                        if actual_mid_b and actual_mid_b not in used_models:
-                            used_models.append(actual_mid_b)
-                        total_used_tokens += usage_b.get("totalTokenCount", 0)
-                        if b_idx == 0:
-                            hm = re.search(r"HEADER:\s*(.*)", txt_b)
-                            if hm:
-                                final_header = hm.group(1).strip()
-                        am = re.search(r"ANSWERS_START(.*?)ANSWERS_END", txt_b, re.DOTALL)
-                        if am and am.group(1).strip():
-                            merged_answers.append(am.group(1).strip())
-                        txt_b_clean = re.sub(r"ANSWERS_START.*?ANSWERS_END", "", txt_b, flags=re.DOTALL)
-                        cm = re.search(r"CONTENT_START(.*?)CONTENT_END", txt_b_clean, re.DOTALL)
-                        if cm:
-                            merged_contents.append(cm.group(1).strip())
-                        else:
-                            clean_b = re.sub(r"HEADER:.*\n?", "", txt_b_clean).replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
-                            merged_contents.append(clean_b)
-
-                    if all_ok and extract_answers:
-                        ans_prompt = """請只專心辨識這幾頁考卷上的「正確解答」（包含題號旁手寫紅筆／藍筆／鉛筆寫的答案、括號內的選項字母、圈選的選項，或考卷附帶的解答區）。
-                        **不要輸出題目文字**，請嚴格依照以下緊湊格式逐大題輸出：
-                        - 選擇題：只列選項字母，每 5 題空一格，例如 `【一、ADCBC ACBDA】`。
-                        - 填充題／計算題：只列最後答案（不寫算式過程），題號用 `(1)` 或 `(2-1)` 緊接答案、各題之間空一格，例如 `【二、(1)0 (2-1)$\frac{\sqrt{2}}{5}$ (2-2)$2\sqrt{2}-\sqrt{3}$】`。
-                        請一題一題看清楚括號內手寫字母（特別區分 D 與 B、A 與 C），絕對不可猜測或跳號。若完全沒有解答則輸出空字串。"""
-                        ans_parts = [{"text": ans_prompt}]
-                        for idx in indices:
-                            pix = doc[idx].get_pixmap(dpi=250)
-                            b64 = base64.b64encode(pix.tobytes("jpeg")).decode('utf-8')
-                            ans_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
-                        ans_out, ans_usage, actual_mid_ans = call_api_with_retry(ans_parts, selected_model, api_key)
-                        if ans_out and ans_out.strip():
-                            if actual_mid_ans and actual_mid_ans not in used_models:
-                                used_models.append(actual_mid_ans)
-                            total_used_tokens += ans_usage.get("totalTokenCount", 0)
-                            merged_answers = [ans_out.strip()]
-
-                    doc.close()
-                    txt = f"HEADER: {final_header}\nCONTENT_START\n" + "\n".join(merged_contents) + "\nCONTENT_END" if (all_ok and merged_contents) else None
-
-                    if txt:
-                        used_tokens = total_used_tokens
-                        st.session_state["request_count"] += 1
-                        st.session_state["total_tokens"] += used_tokens
-                        actual_model_str = ", ".join(used_models) if used_models else selected_model
-                        if gsheet_url:
-                            log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), actual_model_str, used_tokens)
-                        base_name = os.path.splitext(uploaded_file.name)[0]
-                        answers_txt = "\n".join(merged_answers) if (extract_answers and merged_answers) else None
-                        docx_bytes = create_word_document(txt, is_english_mode, extracted_pics=all_extracted_pics if enable_image_crop else None, answers_text=answers_txt, ans_title=base_name)
-                        out_name = f"{base_name}.docx"
-                        st.session_state["docx_bytes"] = docx_bytes
-                        st.session_state["docx_name"] = out_name
-                        st.session_state["history"].insert(0, {
-                            "name": out_name,
-                            "data": docx_bytes,
-                            "time": datetime.now(timezone(timedelta(hours=8))).strftime("%H:%M:%S"),
-                            "model": actual_model_str,
-                            "pages": len(indices)
-                        })
-                        st.session_state["history"] = st.session_state["history"][:10]
-
-                        st.success(f"🎉 全部排版完成（實際使用模型：`{actual_model_str}`）！請點擊右側按鈕下載")
-                    else:
-                        st.error("❌ 轉換失敗，請更換模型或稍後重試。")
-
-with col_right:
-    # 卡片 3：考卷下載區
-    with st.container(border=True):
-        st.subheader("📥 考卷下載區")
+        # 最新轉檔結果高亮卡片
         if "docx_bytes" in st.session_state:
-            st.download_button(
-                label=f"⬇️ 下載：{st.session_state['docx_name']}",
-                data=st.session_state["docx_bytes"],
-                file_name=st.session_state["docx_name"],
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                type="primary",
-                use_container_width=True
-            )
-        else:
-            st.info("尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。")
-
-        # 本次轉檔歷史紀錄（僅保留檔名與下載鈕，垂直置中）
-        if st.session_state["history"]:
-            with st.expander(f"📜 本次轉檔紀錄（共 {len(st.session_state['history'])} 份）", expanded=True):
-                for i, item in enumerate(st.session_state["history"]):
-                    c1, c2 = st.columns([2.2, 1.1], vertical_alignment="center")
-                    c1.markdown(
-                        f"<div style='display:flex; flex-direction:column; justify-content:center; min-height:38px;'>"
-                        f"<div style='font-weight:600; word-break:break-all; line-height:1.25;'>{item['name']}</div>"
-                        f"<div style='font-size:0.78rem; opacity:0.7; margin-top:2px;'>🕒 {item['time']} ｜ 🧠 {item.get('model', '')}</div>"
-                        f"</div>",
+            lat_time = st.session_state.get("docx_time") or (st.session_state["history"][0]["time"] if st.session_state["history"] else "")
+            lat_model = st.session_state.get("docx_model") or (st.session_state["history"][0].get("model", "") if st.session_state["history"] else "")
+            with st.container(border=True):
+                lat_c1, lat_c2 = st.columns([2.1, 1.05], vertical_alignment="center")
+                with lat_c1:
+                    st.markdown(
+                        f"<div style='display:flex; align-items:center; gap:11px;'>"
+                        f"<div style='width:36px; height:36px; background:{ACCENT_SOFT}; color:{ACCENT_PRIMARY}; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;'>"
+                        f"<svg width='16' height='16' fill='none' stroke='currentColor' stroke-width='2' viewBox='0 0 24 24'><path stroke-linecap='round' stroke-linejoin='round' d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'/></svg>"
+                        f"</div>"
+                        f"<div style='min-width:0;'>"
+                        f"<div style='font-weight:700; font-size:0.88rem; color:{TEXT_PRIMARY}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{st.session_state['docx_name']}</div>"
+                        f"<div style='font-size:0.75rem; color:{TEXT_SECONDARY}; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>🕒 {lat_time} &nbsp;|&nbsp; 🧠 {lat_model}</div>"
+                        f"</div></div>",
                         unsafe_allow_html=True
                     )
-                    c2.download_button(
-                        label="下載",
-                        data=item["data"],
-                        file_name=item["name"],
+                with lat_c2:
+                    st.download_button(
+                        label="⬇ 下載 (.docx)",
+                        data=st.session_state["docx_bytes"],
+                        file_name=st.session_state["docx_name"],
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        key=f"hist_dl_{i}",
+                        type="primary",
                         use_container_width=True
                     )
+        else:
+            st.markdown(
+                f"<div style='background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-radius:12px; padding:0.9rem; text-align:center; color:{TEXT_SECONDARY}; font-size:0.84rem;'>"
+                f"尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。"
+                f"</div>",
+                unsafe_allow_html=True
+            )
 
+        st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
 
-    # 卡片 4：今日額度與用量監控
-    with st.container(border=True):
-        st.subheader("📊 今日額度與用量監控")
+        # 歷史轉檔紀錄（僅此區塊有滾動卷軸）
+        hist_count = len(st.session_state["history"])
+        hh1, hh2 = st.columns([1.5, 1], vertical_alignment="center")
+        with hh1:
+            st.markdown(f"<div style='font-size:0.78rem; font-weight:700; color:{TEXT_SECONDARY};'>歷史轉檔紀錄（共 {hist_count} 份）</div>", unsafe_allow_html=True)
+        with hh2:
+            st.markdown(f"<div style='text-align:right; font-size:0.75rem; color:{TEXT_MUTED};'>僅保留本次工作階段</div>", unsafe_allow_html=True)
+
+        with st.container(height=134, border=False):
+            if hist_count == 0:
+                st.markdown(
+                    f"<div style='background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-radius:12px; padding:1.15rem; text-align:center; color:{TEXT_MUTED}; font-size:0.8rem;'>"
+                    f"目前尚無歷史轉檔紀錄"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+            else:
+                for i, item in enumerate(st.session_state["history"]):
+                    hc1, hc2 = st.columns([2.7, 0.55], vertical_alignment="center")
+                    with hc1:
+                        st.markdown(
+                            f"<div style='background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-radius:12px; padding:6px 12px; height:46px; display:flex; flex-direction:column; justify-content:center;'>"
+                            f"<div style='font-weight:600; font-size:0.8rem; color:{TEXT_PRIMARY}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.25;'>{item['name']}</div>"
+                            f"<div style='font-size:0.72rem; color:{TEXT_SECONDARY}; margin-top:2px; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>🕒 {item['time']} &nbsp;|&nbsp; 🧠 {item.get('model', '')}</div>"
+                            f"</div>",
+                            unsafe_allow_html=True
+                        )
+                    with hc2:
+                        st.download_button(
+                            label="⬇",
+                            data=item["data"],
+                            file_name=item["name"],
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key=f"hist_dl_{i}",
+                            type="secondary",
+                            use_container_width=True
+                        )
+
+# ==========================================
+# 🧩 Row 2：頁數範圍與操作按鈕 ＆ 今日額度與用量監控（等高 162px 切齊）
+# ==========================================
+row2_left, row2_right = st.columns([1, 1], gap="medium")
+
+with row2_left:
+    with st.container(height=162, border=True):
+        total_pages = 0
+        pdf_bytes = None
+        if uploaded_file is not None:
+            pdf_bytes = uploaded_file.getvalue()
+            doc_preview = fitz.open(stream=pdf_bytes, filetype="pdf")
+            total_pages = len(doc_preview)
+            doc_preview.close()
+
+        pg_c1, pg_c2 = st.columns([0.92, 2.68], gap="small", vertical_alignment="center")
+        with pg_c1:
+            pg_label_txt = f"頁數範圍 ({total_pages}頁)" if total_pages > 0 else "頁數範圍"
+            st.markdown(
+                f"<div class='pg-addon-left' style='height:38px; display:flex; align-items:center; justify-content:center; background:{BG_SUBCARD}; border:1px solid {BORDER_MAIN}; border-right:1px solid {BORDER_MAIN}; border-radius:12px 0 0 12px; font-size:0.8rem; font-weight:700; color:{TEXT_SECONDARY}; white-space:nowrap; padding:0 12px; margin-bottom:10px;'>{pg_label_txt}</div>",
+                unsafe_allow_html=True
+            )
+        with pg_c2:
+            page_input = st.text_input("頁數範圍", value="", placeholder="例：1-3（留空則預設轉換全部）", label_visibility="collapsed")
+
+        act_c1, act_c2 = st.columns([2.5, 1], gap="small", vertical_alignment="center")
+        with act_c1:
+            start_btn = st.button("⚡ 開始 AI 解析並排版", type="primary", use_container_width=True, disabled=(uploaded_file is None))
+        with act_c2:
+            if st.button("⏹ 停止生成", type="secondary", use_container_width=True):
+                st.session_state["stop_requested"] = True
+
+        status_placeholder = st.empty()
+        progress_placeholder = st.empty()
+        if "last_status_msg" not in st.session_state:
+            st.session_state["last_status_msg"] = ("待命中，請上傳 PDF 考卷開始解析", 0)
+        msg_txt, msg_pct = st.session_state["last_status_msg"]
+        status_placeholder.markdown(
+            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY}; margin-top:4px;'>"
+            f"<span style='white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{msg_txt}</span>"
+            f"<span style='font-weight:600; color:{ACCENT_PRIMARY};'>{msg_pct}%</span></div>",
+            unsafe_allow_html=True
+        )
+        progress_placeholder.markdown(
+            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:4px;'>"
+            f"<div style='width:{msg_pct}%; height:100%; background:{ACCENT_PRIMARY}; border-radius:999px; transition:width 0.3s ease;'></div></div>",
+            unsafe_allow_html=True
+        )
+
+with row2_right:
+    with st.container(height=162, border=True):
         global_stats = get_global_usage(gsheet_url) if gsheet_url else None
         if global_stats is not None:
             disp_count = global_stats.get("today_requests", global_stats.get("total_requests", 0))
@@ -1144,9 +1161,212 @@ with col_right:
             disp_count = st.session_state["request_count"]
             disp_tokens = st.session_state["total_tokens"]
 
-        st.markdown(f"<p style='font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem;'>轉檔次數：{disp_count} 次 ｜ Tokens：{disp_tokens:,}</p>", unsafe_allow_html=True)
-
         ref_limit = 200_000
         usage_ratio = min(disp_tokens / ref_limit, 1.0)
-        st.progress(usage_ratio, text=f"今日額度佔比 ({usage_ratio*100:.2f}%)")
+        pct_width = f"{usage_ratio * 100:.2f}%"
+
+        u_h1, u_h2 = st.columns([1.6, 1], vertical_alignment="center")
+        with u_h1:
+            st.markdown(f"<div style='font-size:0.9rem; font-weight:700; color:{TEXT_PRIMARY};'>📊 今日額度與用量監控</div>", unsafe_allow_html=True)
+        with u_h2:
+            st.markdown(f"<div style='text-align:right; font-size:0.8rem; font-weight:600; color:{ACCENT_PRIMARY};'>今日額度：{usage_ratio*100:.2f}%</div>", unsafe_allow_html=True)
+
+        u_m1, u_m2 = st.columns(2, vertical_alignment="center")
+        with u_m1:
+            st.markdown(f"<div style='font-size:0.8rem; color:{TEXT_SECONDARY}; margin-top:4px;'>當日轉檔次數：<strong style='color:{TEXT_PRIMARY};'>{disp_count} 次</strong></div>", unsafe_allow_html=True)
+        with u_m2:
+            st.markdown(f"<div style='text-align:right; font-size:0.8rem; color:{TEXT_SECONDARY}; margin-top:4px;'>累計用量：<strong style='color:{TEXT_PRIMARY};'>{disp_tokens:,} Tokens</strong></div>", unsafe_allow_html=True)
+
+        st.markdown(
+            f"""
+            <div style="width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin: 10px 0 13px 0;">
+                <div style="width:{pct_width}; height:100%; background:{ACCENT_PRIMARY}; border-radius:999px; transition: width 0.3s ease;"></div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
         st.link_button("🔗 查看 Google 官方即時額度", "https://aistudio.google.com/usage", use_container_width=True)
+
+if start_btn and uploaded_file is not None and pdf_bytes is not None:
+    st.session_state["stop_requested"] = False
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    indices = parse_page_selection(page_input, len(doc))
+
+    math_rule_txt = (
+        "**僅在分數、根號、線段本體時使用標準 LaTeX 語法並以單一 `$` 包夾**（例如 `$\\frac{1}{2}$`、`$\\sqrt{3}$`、`$\\overline{AB}$`）。**等號、數字與其他文字絕對不要包進 `$` 裡面**（例如寫成 `$\\overline{BC}$＝1`，不可寫成 `$\\overline{BC}＝1$`）。單純的英文字母（如 `ABCD`、`x`）、數字比例（如 `5：6：3`）或一般中文敘述請維持純文字，**不要**放進 `$` 裡面。"
+        if enable_omml_math else
+        "**絕對不要使用 LaTeX 語法或 `$` 符號**（例如不要寫 `$x^2$`、`\\frac{1}{2}`、`\\overline{AB}`、`\\bot`），線段直接寫 `AB`、分數直接寫 `1/2`、垂直寫 `⊥`、平行寫 `//`，請直接輸出純文字與 Unicode 符號（如 `x²`、`1/2`、`×`、`÷`）。數學算式中的 `+ - × ÷ ± < > = :` 請使用**全形符號**（`＋ － × ÷ ± ＜ ＞ ＝ ：`）。"
+    )
+    prompt = """
+        請分析考卷圖片並嚴格遵守以下規則進行逐字轉錄與排版：
+        0. **最高原則（過濾無關雜訊、手寫與精確轉錄）**：
+           - **完全忽略所有手寫筆跡與解答詳解**（包含題號旁的紅筆/藍筆/鉛筆答案、選項上的圈選或刪除線、空白處的計算過程，以及答案卷上附帶的「評分標準／參考算式／詳解」），只辨識原本的**印刷體題目**。
+           - **完全忽略所有考試規則說明與頁首頁尾雜訊**（例如：`※試題卷共 X 頁...`、`請使用 2B 鉛筆畫在答案卡上`、`請使用黑筆在答案卷上作答`、`〔第 X 頁，共 X 頁〕`、`「試題結束」`、答案卷頂端的學校/範圍/班級座號姓名欄），這些提示字句一律不要輸出。
+           - **答案卷／作答卷處理原則**：不需要整張轉錄答案卷！答案卷上的「選擇題／填充題填答格子表格」（用來給學生填寫答案的空白表格）**絕對不要輸出**；只有當答案卷上印有**計算題、證明題、作圖題或應用題的完整題目敘述**時，才需要把該大題標題與題目（不含解答算式）轉錄出來。
+           - 必須**逐字精確轉錄**印刷體題目與選項，絕對不可自行改寫、腦補或省略。
+           - 保留小數點（如 `100.0`）與單位斜線（如 `g/cm³`）的原貌。
+           - {math_rule_txt}
+        1. HEADER: 強制重組標題為 `[年份]([學期])[學校]                  [考試名稱]                            `。
+           - `[年份]` 必須是民國年數字（如 `115`、`114`、`113`），**絕對不可寫成縣市名稱（如新北、台北）**。
+           - [考試名稱]後面的空格一定要加上
+           - 絕對不要加上 <u> 或 ** 等任何 HTML 或 Markdown 標籤
+           - 學校只需要名稱前兩個字（如 `中和`），考試只需要標示第一次、第二次、或第三次段考試題並且要在整行標題包含後面空格加上底線，然後要靠左對齊。
+           - 範例：`115(一)中和                  第一次段考試題                            `。
+        2. **選擇題 / 是非題**：
+           - 必須在題號後加上括號 `(   )`，且括號後面**不要加空格**，直接接題目文字。
+           - 範例：`1.(   )這是題目`。
+        3. **填充題 / 作圖題 / 計算題**：
+           - 題號後 **不要** 加括號，直接空格接題目。
+           - 範例：`2. 請畫出三角形` 或 `3. ＿＿＿`。
+        4. **選項處理**：
+           - 若選項是 1,2,3,4 或 (1)(2)(3)(4)，請轉為 ①②③④。
+           - 若選項是 (A)(B)(C)(D)，保留原樣。
+           - **務必將每個選項 (A)(B)(C)(D) 或 ①②③④ 放在新的一行**。
+        5. 重要：忽略圖片、插圖，不要輸出圖片描述；但若考卷或題目附有**文字/數據表格、分數對照表或配分表**，請務必使用標準 Markdown 表格語法（`| 欄位1 | 欄位2 |`）完整輸出表格內容。
+        6. 如果找不到標題，請把第一行文字當作標題。
+        格式回傳（務必完整包含頭尾標記）：
+        HEADER: [標題]
+        CONTENT_START
+        ...
+        CONTENT_END
+        """
+
+    if enable_image_crop:
+        prompt += """
+        7. **配圖編號配對**：
+           - 圖片中已經用紅框標記並寫上 `PIC:編號`（例如 `PIC:1`、`PIC:2`）。
+           - 若某題目附有該幾何圖形、實驗裝置圖或圖表，請在該題文字的最後面加上 `[PIC: 編號]`（例如 `[PIC: 1]`）。
+           - **若紅框內是「手寫筆跡／手寫計算過程」、「純文字」、「空白作答欄框線」或是「已經輸出為 Markdown 表格的文字/數據表格」，請絕對不要輸出 `[PIC: 編號]`**。只針對「印刷體的幾何圖形、實驗裝置圖或圖表」輸出 `[PIC: 編號]`。
+           - 若該題沒有配圖，則不要輸出 `[PIC: ...]`。
+    """
+
+    prompt = prompt.replace("{math_rule_txt}", math_rule_txt)
+
+    batches = [indices[i:i + 2] for i in range(0, len(indices), 2)]
+    total_steps = len(batches) + (1 if extract_answers else 0)
+    all_extracted_pics = {}
+    next_pic_id = 1
+    merged_contents = []
+    merged_answers = []
+    final_header = "考卷排版結果"
+    total_used_tokens = 0
+    used_models = []
+    all_ok = True
+
+    for b_idx, batch in enumerate(batches):
+        if st.session_state.get("stop_requested"):
+            all_ok = False
+            break
+        pct = int(((b_idx + 0.5) / total_steps) * 100)
+        cur_msg = f"⏳ 正在解析... {b_idx + 1}/{total_steps} 題目文字與版面辨識..."
+        status_placeholder.markdown(
+            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY}; margin-top:4px;'>"
+            f"<span>{cur_msg}</span><span style='font-weight:600; color:{ACCENT_PRIMARY};'>{pct}%</span></div>",
+            unsafe_allow_html=True
+        )
+        progress_placeholder.markdown(
+            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:4px;'>"
+            f"<div style='width:{pct}%; height:100%; background:{ACCENT_PRIMARY}; border-radius:999px;'></div></div>",
+            unsafe_allow_html=True
+        )
+
+        parts = [{"text": prompt}]
+        for idx in batch:
+            pix = doc[idx].get_pixmap(dpi=250)
+            jpg_bytes = pix.tobytes("jpeg")
+            if enable_image_crop:
+                pil_page = Image.open(io.BytesIO(jpg_bytes)).convert("RGB")
+                annotated_page, page_pics = extract_diagrams_from_page_cv2(pil_page, start_id=next_pic_id)
+                next_pic_id += len(page_pics)
+                all_extracted_pics.update(page_pics)
+                buf = io.BytesIO()
+                annotated_page.save(buf, format="JPEG", quality=92)
+                jpg_bytes = buf.getvalue()
+            b64 = base64.b64encode(jpg_bytes).decode('utf-8')
+            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
+
+        txt_b, usage_b, actual_mid_b = call_api_with_retry(parts, selected_model, api_key)
+        if not txt_b:
+            all_ok = False
+            break
+        if actual_mid_b and actual_mid_b not in used_models:
+            used_models.append(actual_mid_b)
+        total_used_tokens += usage_b.get("totalTokenCount", 0)
+        if b_idx == 0:
+            hm = re.search(r"HEADER:\s*(.*)", txt_b)
+            if hm:
+                final_header = hm.group(1).strip()
+        am = re.search(r"ANSWERS_START(.*?)ANSWERS_END", txt_b, re.DOTALL)
+        if am and am.group(1).strip():
+            merged_answers.append(am.group(1).strip())
+        txt_b_clean = re.sub(r"ANSWERS_START.*?ANSWERS_END", "", txt_b, flags=re.DOTALL)
+        cm = re.search(r"CONTENT_START(.*?)CONTENT_END", txt_b_clean, re.DOTALL)
+        if cm:
+            merged_contents.append(cm.group(1).strip())
+        else:
+            clean_b = re.sub(r"HEADER:.*\n?", "", txt_b_clean).replace("CONTENT_START", "").replace("CONTENT_END", "").strip()
+            merged_contents.append(clean_b)
+
+    if all_ok and extract_answers and not st.session_state.get("stop_requested"):
+        pct = int(((len(batches) + 0.5) / total_steps) * 100)
+        cur_msg = f"⏳ 正在解析... {total_steps}/{total_steps} 辨識考卷參考解答..."
+        status_placeholder.markdown(
+            f"<div style='display:flex; justify-content:space-between; font-size:0.75rem; color:{TEXT_SECONDARY}; margin-top:4px;'>"
+            f"<span>{cur_msg}</span><span style='font-weight:600; color:{ACCENT_PRIMARY};'>{pct}%</span></div>",
+            unsafe_allow_html=True
+        )
+        progress_placeholder.markdown(
+            f"<div style='width:100%; height:6px; background:{BORDER_SUBTLE}; border-radius:999px; overflow:hidden; margin-top:4px;'>"
+            f"<div style='width:{pct}%; height:100%; background:{ACCENT_PRIMARY}; border-radius:999px;'></div></div>",
+            unsafe_allow_html=True
+        )
+
+        ans_prompt = """請只專心辨識這幾頁考卷上的「正確解答」（包含題號旁手寫紅筆／藍筆／鉛筆寫的答案、括號內的選項字母、圈選的選項，或考卷附帶的解答區）。
+        **不要輸出題目文字**，請嚴格依照以下緊湊格式逐大題輸出：
+        - 選擇題：只列選項字母，每 5 題空一格，例如 `【一、ADCBC ACBDA】`。
+        - 填充題／計算題：只列最後答案（不寫算式過程），題號用 `(1)` 或 `(2-1)` 緊接答案、各題之間空一格，例如 `【二、(1)0 (2-1)$\frac{\sqrt{2}}{5}$ (2-2)$2\sqrt{2}-\sqrt{3}$】`。
+        請一題一題看清楚括號內手寫字母（特別區分 D 與 B、A 與 C），絕對不可猜測或跳號。若完全沒有解答則輸出空字串。"""
+        ans_parts = [{"text": ans_prompt}]
+        for idx in indices:
+            pix = doc[idx].get_pixmap(dpi=250)
+            b64 = base64.b64encode(pix.tobytes("jpeg")).decode('utf-8')
+            ans_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
+        ans_out, ans_usage, actual_mid_ans = call_api_with_retry(ans_parts, selected_model, api_key)
+        if ans_out and ans_out.strip():
+            if actual_mid_ans and actual_mid_ans not in used_models:
+                used_models.append(actual_mid_ans)
+            total_used_tokens += ans_usage.get("totalTokenCount", 0)
+            merged_answers = [ans_out.strip()]
+
+    doc.close()
+    txt = f"HEADER: {final_header}\nCONTENT_START\n" + "\n".join(merged_contents) + "\nCONTENT_END" if (all_ok and merged_contents) else None
+
+    if txt:
+        used_tokens = total_used_tokens
+        st.session_state["request_count"] += 1
+        st.session_state["total_tokens"] += used_tokens
+        actual_model_str = ", ".join(used_models) if used_models else selected_model
+        if gsheet_url:
+            log_usage_to_gsheet(gsheet_url, uploaded_file.name, len(indices), actual_model_str, used_tokens)
+        base_name = os.path.splitext(uploaded_file.name)[0]
+        answers_txt = "\n".join(merged_answers) if (extract_answers and merged_answers) else None
+        docx_bytes = create_word_document(txt, is_english_mode, extracted_pics=all_extracted_pics if enable_image_crop else None, answers_text=answers_txt, ans_title=base_name)
+        out_name = f"{base_name}.docx"
+        now_str = datetime.now(timezone(timedelta(hours=8))).strftime("%H:%M:%S")
+        st.session_state["docx_bytes"] = docx_bytes
+        st.session_state["docx_name"] = out_name
+        st.session_state["docx_time"] = now_str
+        st.session_state["docx_model"] = actual_model_str
+        st.session_state["last_status_msg"] = ("✅ 排版完成！已自動更新至右側最新產出", 100)
+        st.session_state["history"].insert(0, {
+            "name": out_name,
+            "data": docx_bytes,
+            "time": now_str,
+            "model": actual_model_str,
+            "pages": len(indices)
+        })
+        st.session_state["history"] = st.session_state["history"][:20]
+        st.rerun()
+    else:
+        st.session_state["last_status_msg"] = ("⏹ 已停止生成或轉換失敗", 0)
+        st.error("❌ 轉換失敗或已中止，請更換模型或稍後重試。")
