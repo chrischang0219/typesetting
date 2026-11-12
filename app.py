@@ -720,6 +720,11 @@ st.markdown("<h2 style='text-align: center; margin-top: -0.5rem; margin-bottom: 
 # 自訂樣式：單一視窗免滾動緊湊排版、沉穩藍灰卡片與置中上傳區
 st.markdown("""
 <style>
+/* 全域米白背景與深棕文字 */
+.stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    background-color: #F5F1EB !important;
+    color: #2C2520 !important;
+}
 /* 縮小頁面上下留白，讓單一畫面即可完整操作 */
 .block-container {
     padding-top: 1.5rem !important;
@@ -731,14 +736,18 @@ header[data-testid="stHeader"] {
     height: 2.2rem !important;
     background: transparent !important;
 }
-/* 卡片容器樣式與緊湊內距（自動相容淺色/深色模式） */
+/* 卡片容器樣式：純白卡片搭配暖棕邊框 */
 [data-testid="stVerticalBlockBorderWrapper"] > div {
-    background-color: var(--secondary-background-color);
-    border-color: rgba(128, 145, 168, 0.3) !important;
+    background-color: #FFFFFF !important;
+    border-color: #E2D9CE !important;
     border-radius: 12px !important;
     padding: 0.85rem 1rem !important;
+    box-shadow: 0 2px 8px rgba(44, 37, 32, 0.04) !important;
 }
-/* 縮小卡片標題間距 */
+/* 縮小卡片標題間距與深棕字色 */
+h2, h3 {
+    color: #2C2520 !important;
+}
 h3 {
     margin-top: 0 !important;
     margin-bottom: 0.4rem !important;
@@ -749,11 +758,12 @@ h3 {
     white-space: nowrap !important;
     line-height: 1.35 !important;
     font-size: 0.9rem !important;
+    color: #2C2520 !important;
 }
-/* 自訂檔案上傳區文字與緊湊高度（自動相容淺色/深色模式） */
+/* 自訂檔案上傳區：暖米色底搭配棕色虛線框 */
 [data-testid="stFileUploaderDropzone"] {
-    background-color: var(--background-color);
-    border: 1.5px dashed #4a688d;
+    background-color: #F2ECE4 !important;
+    border: 1.5px dashed #B8A99A !important;
     border-radius: 10px;
     min-height: 115px;
     padding: 0.8rem !important;
@@ -780,7 +790,7 @@ h3 {
     content: "☁️ 拖曳 PDF 考卷檔案至此或點此上傳檔案";
     font-size: 1rem;
     font-weight: 500;
-    color: var(--text-color);
+    color: #2C2520 !important;
     display: block;
     text-align: center;
 }
@@ -790,15 +800,54 @@ h3 {
 [data-testid="stFileUploaderDropzone"] button {
     display: none;
 }
-/* 主要按鈕沉穩藍灰色 */
+/* 下拉選單與輸入框暖米色系 */
+div[data-baseweb="select"] > div {
+    background-color: #F8F5F0 !important;
+    border-color: #D8CEC2 !important;
+    color: #2C2520 !important;
+}
+div[data-testid="stTextInput"] div[data-baseweb="input"] {
+    background-color: #F8F5F0 !important;
+    border-color: #D8CEC2 !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    box-sizing: border-box !important;
+}
+div[data-testid="stTextInput"] input {
+    color: #2C2520 !important;
+    height: 40px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 40px !important;
+}
+/* 主要按鈕木質棕色 */
 button[kind="primary"] {
-    background-color: #3b5575 !important;
-    border-color: #4a688d !important;
-    color: #ffffff !important;
+    background-color: #82542F !important;
+    border-color: #82542F !important;
+    color: #FFFFFF !important;
     font-weight: 600 !important;
 }
 button[kind="primary"]:hover {
-    background-color: #4a688d !important;
+    background-color: #6D4525 !important;
+    border-color: #6D4525 !important;
+}
+/* 次要按鈕與連結按鈕暖米棕風格 */
+button[kind="secondary"], [data-testid="stLinkButton"] a {
+    background-color: #F8F5F0 !important;
+    border: 1px solid #D8CEC2 !important;
+    color: #2C2520 !important;
+}
+button[kind="secondary"]:hover, [data-testid="stLinkButton"] a:hover {
+    border-color: #82542F !important;
+    color: #82542F !important;
+}
+/* 額度進度條木質棕色 */
+[data-testid="stProgress"] div[role="progressbar"] > div,
+[data-testid="stProgress"] > div > div > div > div {
+    background-color: #82542F !important;
+}
+[data-testid="stProgress"] > div > div {
+    background-color: #EAE2D7 !important;
 }
 /* 強制對齊「已載入」與「選擇頁數輸入框」的高度與邊距 */
 div[data-testid="stTextInput"] {
@@ -807,17 +856,6 @@ div[data-testid="stTextInput"] {
 }
 div[data-testid="stTextInput"] > label {
     display: none !important;
-}
-div[data-testid="stTextInput"] div[data-baseweb="input"] {
-    height: 42px !important;
-    min-height: 42px !important;
-    box-sizing: border-box !important;
-}
-div[data-testid="stTextInput"] input {
-    height: 40px !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-    line-height: 40px !important;
 }
 /* 移除並排欄位內元件的預設底部間距 */
 div[data-testid="stHorizontalBlock"] div[data-testid="stElementContainer"] {
