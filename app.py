@@ -715,8 +715,6 @@ def call_api_with_retry(parts, model_id, api_key):
 # ==========================================
 # 🎨 網頁介面 (Streamlit)
 # ==========================================
-if "theme_mode" not in st.session_state:
-    st.session_state["theme_mode"] = "light"
 if "total_tokens" not in st.session_state:
     st.session_state["total_tokens"] = 0
 if "request_count" not in st.session_state:
@@ -726,58 +724,42 @@ if "history" not in st.session_state:
 if "stop_requested" not in st.session_state:
     st.session_state["stop_requested"] = False
 
-is_dark = st.session_state["theme_mode"] == "dark"
-
-if is_dark:
-    bg_main = "#181615"
-    bg_card = "#211E1C"
-    bg_sub = "#2A2623"
-    border_col = "#3A3430"
-    border_dashed = "#63574E"
-    text_primary = "#F3EFEA"
-    text_muted = "#A59B92"
-    accent_brown = "#9C6B43"
-    accent_brown_hover = "#B07A4E"
-    accent_soft = "#332820"
-    badge_bg = "#332B24"
-    badge_text = "#D8B392"
-else:
-    bg_main = "#F5F1EB"
-    bg_card = "#FFFFFF"
-    bg_sub = "#F2ECE4"
-    border_col = "#E2D9CE"
-    border_dashed = "#B8A99A"
-    text_primary = "#2C2520"
-    text_muted = "#7D7166"
-    accent_brown = "#82542F"
-    accent_brown_hover = "#6D4525"
-    accent_soft = "#EFE5D8"
-    badge_bg = "#F4ECE1"
-    badge_text = "#82542F"
+bg_main = "#F5F1EB"
+bg_card = "#FFFFFF"
+bg_sub = "#F2ECE4"
+border_col = "#E2D9CE"
+border_dashed = "#B8A99A"
+text_primary = "#2C2520"
+text_muted = "#7D7166"
+accent_brown = "#82542F"
+accent_brown_hover = "#6D4525"
+accent_soft = "#EFE5D8"
+badge_bg = "#F4ECE1"
+badge_text = "#82542F"
 
 st.markdown(f"""
 <style>
-/* 全域背景與字體 */
+/* 全域暖米白背景與字體 */
 .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {{
     background-color: {bg_main} !important;
     color: {text_primary} !important;
 }}
 header[data-testid="stHeader"] {{
-    height: 1.8rem !important;
+    height: 1.5rem !important;
     background: transparent !important;
 }}
 .block-container {{
     padding-top: 1.2rem !important;
     padding-bottom: 1.2rem !important;
-    max-width: 1320px !important;
+    max-width: 1280px !important;
 }}
 
-/* 卡片容器設計 */
+/* 卡片容器設計：統一圓角、邊框與內距 */
 [data-testid="stVerticalBlockBorderWrapper"] > div {{
     background-color: {bg_card} !important;
     border: 1px solid {border_col} !important;
     border-radius: 16px !important;
-    padding: 1.15rem 1.35rem !important;
+    padding: 1.2rem 1.35rem !important;
     box-shadow: 0 2px 10px rgba(44, 37, 32, 0.04) !important;
 }}
 
@@ -788,15 +770,15 @@ header[data-testid="stHeader"] {{
     color: {text_primary} !important;
 }}
 [data-testid="stCheckbox"] {{
-    margin-bottom: 0.15rem !important;
+    margin-bottom: 0.1rem !important;
 }}
 
-/* 檔案拖曳上傳區 */
+/* 檔案拖曳上傳區：調整高度讓左右上方卡片等高對齊 */
 [data-testid="stFileUploaderDropzone"] {{
     background-color: {bg_sub} !important;
     border: 1.5px dashed {border_dashed} !important;
     border-radius: 12px !important;
-    min-height: 165px !important;
+    min-height: 186px !important;
     padding: 1rem !important;
     display: flex !important;
     align-items: center !important;
@@ -876,7 +858,8 @@ button[kind="secondary"]:hover {{
     border-color: {accent_brown} !important;
 }}
 
-/* 進度條暖棕色 */
+/* 進度條暖棕色（相容新版 Streamlit） */
+[data-testid="stProgress"] div[role="progressbar"] > div,
 [data-testid="stProgress"] > div > div > div > div {{
     background-color: {accent_brown} !important;
 }}
@@ -887,6 +870,11 @@ button[kind="secondary"]:hover {{
     border: none !important;
     box-shadow: none !important;
     padding: 0 4px 0 0 !important;
+}}
+/* 歷史紀錄列內的下載按鈕對齊卡片高度 */
+[data-testid="stVerticalBlockBorderWrapper"]:has(> div[style*="overflow"]) button[kind="secondary"] {{
+    height: 50px !important;
+    min-height: 50px !important;
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -919,12 +907,12 @@ if app_password:
 gsheet_url = st.secrets.get("GSHEET_WEBHOOK_URL", "").strip()
 
 # ==========================================
-# 🔝 頂部導覽列：左側 AI 模型｜中央標題｜右側 Dark / Light 切換
+# 🔝 頂部導覽列：左側 AI 模型｜中央標題｜右側對稱留白
 # ==========================================
-top_l, top_c, top_r = st.columns([1.3, 2, 1.3], vertical_alignment="center")
+top_l, top_c, top_r = st.columns([1.2, 2, 1.2], vertical_alignment="center")
 
 with top_l:
-    m_lbl, m_sel = st.columns([0.55, 1.45], vertical_alignment="center")
+    m_lbl, m_sel = st.columns([0.45, 1.55], vertical_alignment="center")
     with m_lbl:
         st.markdown(f"<div style='font-size:0.9rem; font-weight:600; color:{text_muted}; white-space:nowrap;'>AI 模型</div>", unsafe_allow_html=True)
     with m_sel:
@@ -944,27 +932,17 @@ with top_c:
     )
 
 with top_r:
-    _, t_col1, t_col2 = st.columns([0.6, 1, 1], vertical_alignment="center")
-    with t_col1:
-        if st.button("🌙 Dark", type="primary" if is_dark else "secondary", use_container_width=True):
-            if not is_dark:
-                st.session_state["theme_mode"] = "dark"
-                st.rerun()
-    with t_col2:
-        if st.button("☀️ Light", type="primary" if not is_dark else "secondary", use_container_width=True):
-            if is_dark:
-                st.session_state["theme_mode"] = "light"
-                st.rerun()
+    st.empty()
 
-st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
 
 # ==========================================
-# 🧩 主版面：左右雙欄結構
+# 🧩 主版面：左右等寬雙欄結構，上下卡片切齊對齊
 # ==========================================
-col_left, col_right = st.columns([1.05, 1], gap="large")
+col_left, col_right = st.columns([1, 1], gap="large")
 
 with col_left:
-    # 卡片 01：上傳與設定
+    # 上左卡片 01：上傳與設定
     with st.container(border=True):
         st.markdown(
             f"<div style='margin-bottom:0.75rem;'>"
@@ -976,21 +954,21 @@ with col_left:
 
         uploaded_file = st.file_uploader("選擇 PDF 考卷檔案", type=["pdf"], label_visibility="collapsed")
 
-        st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.55rem;'></div>", unsafe_allow_html=True)
 
-        chk_r1_c1, chk_r1_c2 = st.columns(2)
+        chk_r1_c1, chk_r1_c2 = st.columns([1.15, 0.85])
         with chk_r1_c1:
             is_english_mode = st.checkbox("英文考卷模式 (Times New Roman)", value=False)
         with chk_r1_c2:
             enable_image_crop = st.checkbox("自動裁切圖片 (Beta)", value=False)
 
-        chk_r2_c1, chk_r2_c2 = st.columns(2)
+        chk_r2_c1, chk_r2_c2 = st.columns([1.15, 0.85])
         with chk_r2_c1:
             enable_omml_math = st.checkbox("數學方程式轉換 (Beta)", value=False)
         with chk_r2_c2:
             extract_answers = st.checkbox("文末附帶解答 (辨識考卷答案)", value=False)
 
-    # 卡片：頁數範圍與執行控制列
+    # 下左卡片：頁數範圍與執行控制列
     with st.container(border=True):
         total_pages = 0
         pdf_bytes = None
@@ -1008,11 +986,11 @@ with col_left:
         with pg_c3:
             page_badge_txt = f"共 {total_pages} 頁" if total_pages > 0 else "尚未載入"
             st.markdown(
-                f"<div style='background:{badge_bg}; color:{badge_text}; font-size:0.82rem; font-weight:600; padding:6px 10px; border-radius:8px; text-align:center; white-space:nowrap;'>{page_badge_txt}</div>",
+                f"<div style='background:{badge_bg}; color:{badge_text}; font-size:0.82rem; font-weight:600; padding:7px 10px; border-radius:8px; text-align:center; white-space:nowrap;'>{page_badge_txt}</div>",
                 unsafe_allow_html=True
             )
 
-        st.markdown("<div style='height: 0.55rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.65rem;'></div>", unsafe_allow_html=True)
 
         act_c1, act_c2 = st.columns([2.6, 1], vertical_alignment="center")
         with act_c1:
@@ -1207,7 +1185,7 @@ with col_left:
                 st.error("❌ 轉換失敗或已中止，請更換模型或稍後重試。")
 
 with col_right:
-    # 卡片 02：轉檔結果（含固定高度可滾動的歷史轉檔紀錄）
+    # 上右卡片 02：轉檔結果（含固定高度可滾動的歷史轉檔紀錄）
     with st.container(border=True):
         res_h1, res_h2 = st.columns([2, 1], vertical_alignment="center")
         with res_h1:
@@ -1228,8 +1206,10 @@ with col_right:
 
         st.markdown("<div style='height: 0.45rem;'></div>", unsafe_allow_html=True)
 
-        # 最新產出精選框
+        # 最新產出精選框（若 docx_time/docx_model 為空則自動從第一筆歷史紀錄補齊）
         if "docx_bytes" in st.session_state:
+            lat_time = st.session_state.get("docx_time") or (st.session_state["history"][0]["time"] if st.session_state["history"] else "")
+            lat_model = st.session_state.get("docx_model") or (st.session_state["history"][0].get("model", "") if st.session_state["history"] else "")
             with st.container(border=True):
                 lat_c1, lat_c2 = st.columns([2.1, 1.1], vertical_alignment="center")
                 with lat_c1:
@@ -1238,7 +1218,7 @@ with col_right:
                         f"<div style='width:38px; height:38px; background:{accent_soft}; color:{accent_brown}; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0;'>📄</div>"
                         f"<div style='min-width:0;'>"
                         f"<div style='font-weight:700; font-size:0.95rem; color:{text_primary}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{st.session_state['docx_name']}</div>"
-                        f"<div style='font-size:0.78rem; color:{text_muted}; margin-top:2px;'>🕒 {st.session_state.get('docx_time', '')} &nbsp;｜&nbsp; 🧠 {st.session_state.get('docx_model', '')}</div>"
+                        f"<div style='font-size:0.78rem; color:{text_muted}; margin-top:2px;'>🕒 {lat_time} &nbsp;｜&nbsp; 🧠 {lat_model}</div>"
                         f"</div></div>",
                         unsafe_allow_html=True
                     )
@@ -1253,7 +1233,7 @@ with col_right:
                     )
         else:
             st.markdown(
-                f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:12px; padding:1rem; text-align:center; color:{text_muted}; font-size:0.9rem;'>"
+                f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:12px; padding:1.15rem; text-align:center; color:{text_muted}; font-size:0.9rem;'>"
                 f"尚未有轉檔完成的考卷，請於左側上傳並解析 PDF。"
                 f"</div>",
                 unsafe_allow_html=True
@@ -1269,11 +1249,11 @@ with col_right:
         with hh2:
             st.markdown(f"<div style='text-align:right; font-size:0.78rem; color:{text_muted};'>僅保留本次工作階段</div>", unsafe_allow_html=True)
 
-        # 固定高度滾動區（height=168），避免卡片隨數量無限拉長
-        with st.container(height=168, border=False):
+        # 固定高度滾動區（height=138），讓上下左右卡片底部切齊對齊
+        with st.container(height=138, border=False):
             if hist_count == 0:
                 st.markdown(
-                    f"<div style='background:{bg_sub}; border-radius:10px; padding:1.4rem; text-align:center; color:{text_muted}; font-size:0.84rem;'>"
+                    f"<div style='background:{bg_sub}; border-radius:10px; padding:1.2rem; text-align:center; color:{text_muted}; font-size:0.84rem;'>"
                     f"目前尚無歷史轉檔紀錄"
                     f"</div>",
                     unsafe_allow_html=True
@@ -1283,9 +1263,9 @@ with col_right:
                     hc1, hc2 = st.columns([2.6, 0.7], vertical_alignment="center")
                     with hc1:
                         st.markdown(
-                            f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:10px; padding:7px 12px;'>"
-                            f"<div style='font-weight:600; font-size:0.88rem; color:{text_primary}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'>{item['name']}</div>"
-                            f"<div style='font-size:0.75rem; color:{text_muted}; margin-top:2px;'>🕒 {item['time']} &nbsp;｜&nbsp; 🧠 {item.get('model', '')}</div>"
+                            f"<div style='background:{bg_sub}; border:1px solid {border_col}; border-radius:10px; padding:6px 12px; height:50px; display:flex; flex-direction:column; justify-content:center;'>"
+                            f"<div style='font-weight:600; font-size:0.86rem; color:{text_primary}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.25;'>{item['name']}</div>"
+                            f"<div style='font-size:0.74rem; color:{text_muted}; margin-top:2px; line-height:1.2;'>🕒 {item['time']} &nbsp;｜&nbsp; 🧠 {item.get('model', '')}</div>"
                             f"</div>",
                             unsafe_allow_html=True
                         )
@@ -1300,7 +1280,7 @@ with col_right:
                             use_container_width=True
                         )
 
-    # 卡片：今日額度與用量監控
+    # 下右卡片：今日額度與用量監控
     with st.container(border=True):
         global_stats = get_global_usage(gsheet_url) if gsheet_url else None
         if global_stats is not None:
